@@ -9,6 +9,10 @@ import toast from "react-hot-toast";
 import { useAppSelector } from "../../../store/store";
 import { AxiosError } from "axios";
 
+const coercedBoolean = z
+  .union([z.boolean(), z.enum(["true", "false"])])
+  .transform((value) => value === true || value === "true");
+
 const petSchema = z.object({
   name: z.string().min(1, "Name is required"),
   species: z.enum(["dog", "cat", "bird", "rabbit", "other"]),
@@ -25,9 +29,9 @@ const petSchema = z.object({
     goodWithCats: z.boolean().default(false),
   }),
   health: z.object({
-    vaccinated: z.boolean(),
-    spayedNeutered: z.boolean(),
-    microchipped: z.boolean(),
+    vaccinated: coercedBoolean,
+    spayedNeutered: coercedBoolean,
+    microchipped: coercedBoolean,
     specialNeeds: z.boolean().default(false),
     specialNeedsDescription: z.string().optional(),
   }),
@@ -421,9 +425,6 @@ export default function PetModal({
                                 value="true"
                                 {...register(
                                   `health.${key as keyof PetFormData["health"]}`,
-                                  {
-                                    setValueAs: (v) => v === "true",
-                                  },
                                 )}
                                 className="w-4 h-4 text-primary-600 focus:ring-primary-500"
                               />
@@ -437,9 +438,6 @@ export default function PetModal({
                                 value="false"
                                 {...register(
                                   `health.${key as keyof PetFormData["health"]}`,
-                                  {
-                                    setValueAs: (v) => v === "true",
-                                  },
                                 )}
                                 className="w-4 h-4 text-primary-600 focus:ring-primary-500"
                               />
