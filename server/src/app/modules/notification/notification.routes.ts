@@ -1,0 +1,14 @@
+import { Router } from "express";
+import * as notificationController from "./notification.controller";
+import { authenticate } from "../../common/middlewares/auth.middleware";
+
+const router = Router();
+
+router.use(authenticate);
+
+router.get("/", notificationController.getMyNotifications);
+router.patch("/mark-all-read", notificationController.markAllAsRead);
+router.patch("/:id/read", notificationController.markAsRead);
+router.delete("/:id", notificationController.deleteNotification);
+
+export default router;
