@@ -236,7 +236,7 @@ export default function PetDetail() {
               <h3 className="font-semibold mb-4">Shelter Information</h3>
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 font-bold text-xl">
-                  SA
+                  {shelter?.name?.substring(0, 2).toUpperCase() || "SA"}
                 </div>
                 <div>
                   <p className="font-medium text-gray-900">
