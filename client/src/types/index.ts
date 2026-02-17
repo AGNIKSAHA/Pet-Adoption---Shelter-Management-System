@@ -112,8 +112,11 @@ export interface Foster {
   hasYard: boolean;
   preferredSpecies: string[];
   availability: string;
+  isActive: boolean;
   approvedAt?: string;
   approvedBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface FosterAssignment {

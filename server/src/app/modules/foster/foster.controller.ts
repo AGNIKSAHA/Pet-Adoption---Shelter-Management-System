@@ -1,3 +1,4 @@
+import { Pet } from "../pet/pet.model";
 import { Request, Response } from "express";
 import mongoose, { FilterQuery } from "mongoose";
 import { Foster } from "./foster.model";
@@ -8,7 +9,7 @@ import { AppError } from "../../common/middlewares/error.middleware";
 
 export const getFosters = catchAsync(async (req: Request, res: Response) => {
   const { status, shelterId, page = 1, limit = 20 } = req.query;
-  const query: FilterQuery<typeof Foster> = {};
+  const query: FilterQuery<typeof Foster> = { deletedAt: { $exists: false } };
 
   if (req.user!.role === "shelter_staff") {
     let staffShelterId = req.user!.shelterId;
@@ -116,6 +117,95 @@ export const updateFosterStatus = catchAsync(
   },
 );
 
+export const toggleFosterActive = catchAsync(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    const foster = await Foster.findById(id);
+    if (!foster || foster.deletedAt) {
+      throw new AppError(404, "Foster not found");
+    }
+
+    // Authorization check
+    if (req.user!.role === "adopter") {
+      if (foster.userId.toString() !== req.user!.id) {
+        throw new AppError(403, "Access denied");
+      }
+    } else if (req.user!.role === "shelter_staff") {
+      let shelterId = req.user!.shelterId;
+      if (!shelterId) {
+        const approvedApp = await StaffApplication.findOne({
+          userId: req.user!.id,
+          status: "approved",
+        });
+        if (approvedApp) {
+          shelterId = approvedApp.shelterId.toString();
+        }
+      }
+      if (!shelterId || foster.shelterId.toString() !== shelterId) {
+        throw new AppError(403, "Access denied");
+      }
+    }
+
+    foster.isActive = isActive;
+    await foster.save();
+
+    res.json({
+      success: true,
+      message: `Foster ${isActive ? "activated" : "deactivated"} successfully`,
+      data: foster,
+    });
+  },
+);
+
+export const deleteFoster = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  const foster = await Foster.findById(id);
+  if (!foster || foster.deletedAt) {
+    throw new AppError(404, "Foster record not found");
+  }
+
+  // Only staff can delete
+  let shelterId = req.user!.shelterId;
+  if (!shelterId) {
+    const approvedApp = await StaffApplication.findOne({
+      userId: req.user!.id,
+      status: "approved",
+    });
+    if (approvedApp) {
+      shelterId = approvedApp.shelterId.toString();
+    }
+  }
+
+  if (!shelterId || foster.shelterId.toString() !== shelterId) {
+    throw new AppError(403, "Access denied");
+  }
+
+  // Check if they have active assignments
+  const activeAssignments = await FosterAssignment.countDocuments({
+    fosterId: id,
+    status: "active",
+  });
+
+  if (activeAssignments > 0) {
+    throw new AppError(
+      400,
+      "Cannot delete foster parent with active assignments",
+    );
+  }
+
+  foster.deletedAt = new Date();
+  foster.isActive = false;
+  await foster.save();
+
+  res.json({
+    success: true,
+    message: "Foster record deleted successfully",
+  });
+});
+
 export const getFosterAssignments = catchAsync(
   async (req: Request, res: Response) => {
     const { shelterId } = req.query;
@@ -178,6 +268,16 @@ export const assignPetToFoster = catchAsync(
       throw new AppError(403, "Shelter access required");
     }
 
+    // Check if pet exists and belongs to this shelter
+    const pet = await Pet.findById(petId);
+    if (!pet || pet.shelterId.toString() !== shelterId) {
+      throw new AppError(404, "Pet not found in your shelter");
+    }
+
+    if (pet.status === "fostered") {
+      throw new AppError(400, "Pet is already in foster");
+    }
+
     // Check if foster exists and belongs to this shelter
     const foster = await Foster.findById(fosterId);
     if (!foster || foster.shelterId.toString() !== shelterId) {
@@ -193,6 +293,22 @@ export const assignPetToFoster = catchAsync(
       throw new AppError(400, "Foster parent has reached maximum capacity");
     }
 
+    // Check preferred species
+    if (foster.preferredSpecies && foster.preferredSpecies.length > 0) {
+      const isMatch = foster.preferredSpecies.some((pref) => {
+        const p = pref.toLowerCase();
+        const s = pet.species.toLowerCase();
+        return p.includes(s) || s.includes(p);
+      });
+
+      if (!isMatch) {
+        throw new AppError(
+          400,
+          `This foster parent only accepts: ${foster.preferredSpecies.join(", ")}`,
+        );
+      }
+    }
+
     const assignment = await FosterAssignment.create({
       fosterId,
       petId,
@@ -206,9 +322,71 @@ export const assignPetToFoster = catchAsync(
     foster.currentAnimals += 1;
     await foster.save();
 
+    // Update pet status
+    pet.status = "fostered";
+    await pet.save();
+
     res.status(201).json({
       success: true,
       message: "Pet assigned to foster successfully",
+      data: assignment,
+    });
+  },
+);
+
+export const takeBackPetFromFoster = catchAsync(
+  async (req: Request, res: Response) => {
+    const { id } = req.params; // Assignment ID
+    const { returnStatus = "available", notes: returnNotes } = req.body;
+
+    const assignment = await FosterAssignment.findById(id);
+    if (!assignment || assignment.status !== "active") {
+      throw new AppError(404, "Active foster assignment not found");
+    }
+
+    if (req.user!.role === "shelter_staff") {
+      let shelterId = req.user!.shelterId;
+      if (!shelterId) {
+        const approvedApp = await StaffApplication.findOne({
+          userId: req.user!.id,
+          status: "approved",
+        });
+        if (approvedApp) {
+          shelterId = approvedApp.shelterId.toString();
+        }
+      }
+
+      if (!shelterId || assignment.shelterId.toString() !== shelterId) {
+        throw new AppError(403, "Access denied");
+      }
+    }
+
+    const pet = await Pet.findById(assignment.petId);
+    const foster = await Foster.findById(assignment.fosterId);
+
+    // Update assignment
+    assignment.status = "completed";
+    assignment.endDate = new Date();
+    if (returnNotes) {
+      assignment.notes = `${assignment.notes}\n\nReturn Notes: ${returnNotes}`;
+    }
+    await assignment.save();
+
+    // Update foster parent capacity
+    if (foster) {
+      foster.currentAnimals = Math.max(0, foster.currentAnimals - 1);
+      await foster.save();
+    }
+
+    // Update pet status
+    if (pet) {
+      pet.status = returnStatus;
+      await pet.save();
+    }
+
+    res.json({
+      success: true,
+      message: "Pet taken back from foster successfully",
       data: assignment,
     });
   },
@@ -259,13 +437,40 @@ export const applyToBeFoster = catchAsync(
 export const getAdopterFosterStatus = catchAsync(
   async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const foster = await Foster.findOne({ userId }).populate(
-      "shelterId",
-      "name",
-    );
+    const foster = await Foster.findOne({
+      userId,
+      deletedAt: { $exists: false },
+    }).populate("shelterId", "name");
 
     res.json({
       success: true,
+      data: foster,
+    });
+  },
+);
+
+export const updateFosterProfile = catchAsync(
+  async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const { preferredSpecies, capacity, availability } = req.body;
+
+    const foster = await Foster.findOne({
+      userId,
+      deletedAt: { $exists: false },
+    });
+    if (!foster) {
+      throw new AppError(404, "Foster profile not found");
+    }
+
+    if (preferredSpecies) foster.preferredSpecies = preferredSpecies;
+    if (capacity) foster.capacity = capacity;
+    if (availability) foster.availability = availability;
+
+    await foster.save();
+
+    res.json({
+      success: true,
+      message: "Foster profile updated successfully",
       data: foster,
     });
   },

@@ -21,6 +21,18 @@ router.patch(
   fosterController.updateFosterStatus,
 );
 
+router.patch(
+  "/:id/active",
+  authorize("shelter_staff", "adopter", "admin"),
+  fosterController.toggleFosterActive,
+);
+
+router.delete(
+  "/:id",
+  authorize("shelter_staff", "admin"),
+  fosterController.deleteFoster,
+);
+
 router.get(
   "/assignments",
   authorize("shelter_staff", "admin"),
@@ -33,12 +45,24 @@ router.post(
   fosterController.assignPetToFoster,
 );
 
+router.patch(
+  "/assignments/:id/complete",
+  authorize("shelter_staff"),
+  fosterController.takeBackPetFromFoster,
+);
+
 router.post("/apply", authorize("adopter"), fosterController.applyToBeFoster);
 
 router.get(
   "/my-status",
   authorize("adopter"),
   fosterController.getAdopterFosterStatus,
+);
+
+router.patch(
+  "/update-profile",
+  authorize("adopter"),
+  fosterController.updateFosterProfile,
 );
 
 router.get(

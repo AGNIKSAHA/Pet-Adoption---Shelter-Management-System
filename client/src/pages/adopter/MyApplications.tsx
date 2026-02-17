@@ -8,11 +8,22 @@ import {
   CheckCircle,
   XCircle,
   FileText,
+  Building2,
+  Home,
+  PawPrint,
 } from "lucide-react";
 import api from "../../lib/api";
-import { AdoptionApplication, Shelter } from "../../types";
+import { AdoptionApplication, Shelter, Foster } from "../../types";
 
 export default function MyApplications() {
+  const { data: fosterData, isLoading: isFosterLoading } = useQuery({
+    queryKey: ["my-foster-status"],
+    queryFn: async () => {
+      const response = await api.get("/fosters/my-status");
+      return response.data;
+    },
+  });
+
   const { data, isLoading } = useQuery({
     queryKey: ["my-applications"],
     queryFn: async () => {
@@ -22,6 +33,7 @@ export default function MyApplications() {
   });
 
   const applications = data?.data?.applications || [];
+  const fosterApplication = fosterData?.data as Foster | null;
 
   const getStatusConfig = (status: string) => {
     switch (status) {
@@ -64,7 +76,7 @@ export default function MyApplications() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || isFosterLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
@@ -87,6 +99,81 @@ export default function MyApplications() {
       </div>
 
       <div className="space-y-6">
+        {/* Foster Application Section */}
+        {fosterApplication && (
+          <div className="bg-white rounded-xl shadow-sm border-2 border-primary-100 overflow-hidden hover:shadow-md transition-shadow">
+            <div className="bg-primary-50 px-6 py-2 border-b border-primary-100 flex items-center justify-between">
+              <span className="text-xs font-bold text-primary-700 uppercase tracking-wider flex items-center gap-1">
+                <Building2 className="w-3.5 h-3.5" /> Foster Program Application
+              </span>
+              <span className="text-xs text-primary-500 font-medium">
+                Applied on{" "}
+                {new Date(
+                  fosterApplication.createdAt || Date.now(),
+                ).toLocaleDateString()}
+              </span>
+            </div>
+            <div className="flex flex-col md:flex-row">
+              <div className="w-full md:w-48 h-32 md:h-auto relative bg-gray-100 flex items-center justify-center">
+                <Building2 className="w-12 h-12 text-primary-200" />
+              </div>
+
+              <div className="flex-1 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="text-xl font-bold text-gray-900">
+                      {(fosterApplication.shelterId as Shelter)?.name}
+                    </h3>
+                  </div>
+
+                  <div className="flex flex-col gap-2 text-sm text-gray-500">
+                    <div className="flex items-center gap-2">
+                      <Home className="w-4 h-4 text-primary-500" />
+                      {fosterApplication.homeType} •{" "}
+                      {fosterApplication.capacity} pets capacity
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <PawPrint className="w-4 h-4 text-primary-500" />
+                      Interested in:{" "}
+                      {fosterApplication.preferredSpecies?.length > 0
+                        ? fosterApplication.preferredSpecies.join(", ")
+                        : "Any animal"}
+                    </div>
+                    <p className="line-clamp-1 max-w-md">
+                      Experience: {fosterApplication.experience}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-end gap-3 w-full md:w-auto">
+                  <div
+                    className={`flex items-center gap-2 px-4 py-2 rounded-full border ${getStatusConfig(fosterApplication.status).color} font-medium text-sm capitalize`}
+                  >
+                    {(() => {
+                      const Config = getStatusConfig(fosterApplication.status);
+                      const Icon = Config.icon;
+                      return (
+                        <>
+                          <Icon className="w-4 h-4" />
+                          {Config.label}
+                        </>
+                      );
+                    })()}
+                  </div>
+                  {fosterApplication.status === "approved" && (
+                    <Link
+                      to="/adopter/dashboard"
+                      className="text-primary-600 font-medium hover:text-primary-700 text-sm"
+                    >
+                      Go to Foster Dashboard →
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {applications.map((application: AdoptionApplication) => {
           const statusConfig = getStatusConfig(application.status);
           const StatusIcon = statusConfig.icon;
@@ -159,7 +246,7 @@ export default function MyApplications() {
           );
         })}
 
-        {applications.length === 0 && (
+        {applications.length === 0 && !fosterApplication && (
           <div className="text-center py-16 bg-white rounded-xl border border-dashed border-gray-300">
             <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 mb-4">
               <FileText className="w-8 h-8" />

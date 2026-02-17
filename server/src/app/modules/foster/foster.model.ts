@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IFoster extends Document {
   userId: mongoose.Types.ObjectId;
   shelterId: mongoose.Types.ObjectId;
-  status: "pending" | "approved" | "rejected" | "inactive";
+  status: "pending" | "approved" | "rejected";
   capacity: number;
   currentAnimals: number;
   experience: string;
@@ -13,6 +13,8 @@ export interface IFoster extends Document {
   availability: string;
   approvedBy?: mongoose.Types.ObjectId;
   approvedAt?: Date;
+  isActive: boolean;
+  deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,7 +33,7 @@ const fosterSchema = new Schema<IFoster>(
     },
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected", "inactive"],
+      enum: ["pending", "approved", "rejected"],
       default: "pending",
     },
     capacity: {
@@ -70,6 +72,11 @@ const fosterSchema = new Schema<IFoster>(
       ref: "User",
     },
     approvedAt: Date,
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    deletedAt: Date,
   },
   {
     timestamps: true,
@@ -79,5 +86,7 @@ const fosterSchema = new Schema<IFoster>(
 fosterSchema.index({ userId: 1 });
 fosterSchema.index({ shelterId: 1 });
 fosterSchema.index({ status: 1 });
+fosterSchema.index({ isActive: 1 });
+fosterSchema.index({ deletedAt: 1 });
 
 export const Foster = mongoose.model<IFoster>("Foster", fosterSchema);

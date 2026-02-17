@@ -1,0 +1,229 @@
+import { Mail, Shield, Phone, MapPin } from "lucide-react";
+import { User } from "../../../../types";
+import { UseFormRegister, FieldErrors } from "react-hook-form";
+import { ProfileForm } from "../../Profile";
+
+interface PersonalInfoFormProps {
+  user: User;
+  isEditing: boolean;
+  register: UseFormRegister<ProfileForm>;
+  errors: FieldErrors<ProfileForm>;
+  onSubmit: (e: React.FormEvent) => void;
+}
+
+export default function PersonalInfoForm({
+  user,
+  isEditing,
+  register,
+  errors,
+  onSubmit,
+}: PersonalInfoFormProps) {
+  return (
+    <div className="bg-white shadow rounded-lg overflow-hidden border border-gray-100">
+      <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+        <h2 className="text-lg font-medium text-gray-900">
+          Personal Information
+        </h2>
+        <span className="px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-800 capitalize">
+          {user.role.replace("_", " ")}
+        </span>
+      </div>
+
+      <div className="p-6 space-y-8">
+        <div className="flex items-center space-x-4 pb-6 border-b border-gray-100">
+          <div className="h-16 w-16 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 text-2xl font-bold">
+            {user.firstName[0]}
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">
+              {user.firstName} {user.lastName}
+            </h3>
+            <p className="text-gray-500">
+              Member since{" "}
+              {new Date(
+                user.id
+                  ? parseInt(user.id.substring(0, 8), 16) * 1000
+                  : user._id
+                    ? parseInt(user._id.substring(0, 8), 16) * 1000
+                    : Date.now(),
+              ).getFullYear()}
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={onSubmit} className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-500">
+                First Name
+              </label>
+              {isEditing ? (
+                <input
+                  {...register("firstName")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                />
+              ) : (
+                <p className="text-gray-900 font-medium">{user.firstName}</p>
+              )}
+              {errors.firstName && (
+                <p className="text-xs text-red-500">
+                  {errors.firstName.message as string}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-500">
+                Last Name
+              </label>
+              {isEditing ? (
+                <input
+                  {...register("lastName")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                />
+              ) : (
+                <p className="text-gray-900 font-medium">{user.lastName}</p>
+              )}
+              {errors.lastName && (
+                <p className="text-xs text-red-500">
+                  {errors.lastName.message as string}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg md:col-span-2">
+              <Mail className="w-5 h-5 text-gray-400" />
+              <div>
+                <p className="text-sm font-medium text-gray-500">
+                  Email Address
+                </p>
+                <p className="text-gray-900">{user.email}</p>
+              </div>
+            </div>
+
+            <div
+              className={`flex items-center space-x-3 p-4 ${isEditing ? "bg-white border ring-1 ring-gray-200" : "bg-gray-50"} rounded-lg transition-all`}
+            >
+              <Phone className="w-5 h-5 text-gray-400" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-500">
+                  Phone Number
+                </p>
+                {isEditing ? (
+                  <input
+                    {...register("phone")}
+                    placeholder="Enter phone number"
+                    className="w-full mt-1 px-0 py-0 border-none focus:ring-0 text-gray-900"
+                  />
+                ) : (
+                  <p className="text-gray-900">
+                    {user.phone || "Not provided"}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg">
+              <Shield className="w-5 h-5 text-gray-400" />
+              <div>
+                <p className="text-sm font-medium text-gray-500">
+                  Account Role
+                </p>
+                <p className="text-gray-900 capitalize">
+                  {user.role.replace("_", " ")}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div
+            className={`p-4 ${isEditing ? "bg-white border ring-1 ring-gray-200" : "bg-gray-50"} rounded-lg space-y-4`}
+          >
+            <div className="flex items-center space-x-3">
+              <MapPin className="w-5 h-5 text-gray-400" />
+              <p className="text-sm font-medium text-gray-500">
+                Address Information
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-8">
+              <div className="space-y-1">
+                <label className="text-xs text-gray-400 uppercase tracking-wider font-bold">
+                  Street
+                </label>
+                {isEditing ? (
+                  <input
+                    {...register("address.street")}
+                    className="w-full text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
+                  />
+                ) : (
+                  <p className="text-sm text-gray-900">
+                    {user.address?.street || "No street information"}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs text-gray-400 uppercase tracking-wider font-bold">
+                  City
+                </label>
+                {isEditing ? (
+                  <input
+                    {...register("address.city")}
+                    className="w-full text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
+                  />
+                ) : (
+                  <p className="text-sm text-gray-900">
+                    {user.address?.city || "No city information"}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs text-gray-400 uppercase tracking-wider font-bold">
+                  State / Zip
+                </label>
+                {isEditing ? (
+                  <div className="flex gap-2">
+                    <input
+                      {...register("address.state")}
+                      placeholder="State"
+                      className="w-1/2 text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
+                    />
+                    <input
+                      {...register("address.zipCode")}
+                      placeholder="Zip"
+                      className="w-1/2 text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-900">
+                    {user.address?.state
+                      ? `${user.address.state}, ${user.address.zipCode}`
+                      : "No state/zip information"}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs text-gray-400 uppercase tracking-wider font-bold">
+                  Country
+                </label>
+                {isEditing ? (
+                  <input
+                    {...register("address.country")}
+                    className="w-full text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
+                  />
+                ) : (
+                  <p className="text-sm text-gray-900">
+                    {user.address?.country || "No country information"}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

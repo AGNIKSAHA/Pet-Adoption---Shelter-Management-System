@@ -3,6 +3,7 @@ import { User, IUser } from "../user/user.model";
 import mongoose, { FilterQuery } from "mongoose";
 import { createNotification } from "../../common/utils/notification.util";
 import { encrypt, decrypt } from "../../common/utils/crypto";
+import { io } from "../../../index";
 
 interface IConversation {
   _id: mongoose.Types.ObjectId;
@@ -127,6 +128,18 @@ export const sendMessageToDB = async (
     .populate("senderId", "firstName lastName")
     .populate("receiverId", "firstName lastName");
 
+  const plainMessage = populatedMessage!.toObject();
+  const decryptedMessage = {
+    ...plainMessage,
+    content: decrypt(plainMessage.content),
+  };
+
+  // Emit real-time message via socket
+  if (io) {
+    io.to(receiverId).emit("chat_message", decryptedMessage);
+    io.to(senderId).emit("chat_message", decryptedMessage);
+  }
+
   // Trigger notification for receiver (use unencrypted content)
   await createNotification({
     userId: receiverId,
@@ -136,11 +149,7 @@ export const sendMessageToDB = async (
     link: "/messages",
   });
 
-  const plainMessage = populatedMessage!.toObject();
-  return {
-    ...plainMessage,
-    content: decrypt(plainMessage.content),
-  };
+  return decryptedMessage;
 };
 
 export const markAsReadInDB = async (receiverId: string, senderId: string) => {

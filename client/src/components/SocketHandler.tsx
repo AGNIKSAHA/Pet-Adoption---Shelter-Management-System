@@ -15,7 +15,7 @@ export default function SocketHandler() {
         socket.connect();
       }
 
-      socket.emit("join", user.id);
+      socket.emit("join", user.id || user._id);
 
       const handleNotification = (notification: Notification) => {
         // Refresh notifications query
