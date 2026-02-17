@@ -8,6 +8,8 @@ import toast from "react-hot-toast";
 import { Pet } from "../types";
 import { AxiosError } from "axios";
 
+import { formatAge } from "../lib/format";
+
 interface PetCardProps {
   pet: Pet;
 }
@@ -75,7 +77,7 @@ export default function PetCard({ pet }: PetCardProps) {
           </button>
         )}
         <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-medium text-gray-700 capitalize">
-          {pet.gender} • {pet.age} {pet.age === 1 ? "year" : "years"}
+          {pet.gender} • {formatAge(pet.age)}
         </div>
       </div>
 

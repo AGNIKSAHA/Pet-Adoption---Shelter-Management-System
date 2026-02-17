@@ -13,6 +13,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import api from "../../lib/api";
 import { Pet, Shelter } from "../../types";
+import { formatAge } from "../../lib/format";
 
 export default function PetDetail() {
   const { id } = useParams();
@@ -194,7 +195,7 @@ export default function PetDetail() {
                   Age
                 </p>
                 <p className="font-medium text-gray-900">
-                  {pet.age} {pet.age === 1 ? "month" : "months"}
+                  {formatAge(pet.age)}
                 </p>
               </div>
               <div className="p-3 bg-gray-50 rounded-xl">
