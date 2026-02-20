@@ -1,43 +1,31 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAppSelector } from "../store/store";
 import { Building2, AlertCircle, Clock, XCircle } from "lucide-react";
-
-export default function ShelterGuard({
-  children,
-}: {
-  children: React.ReactNode;
+export default function ShelterGuard({ children, }: {
+    children: React.ReactNode;
 }) {
-  const { user, activeRole, activeShelterId } = useAppSelector(
-    (state) => state.auth,
-  );
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  if (location.pathname === "/profile") {
-    return <>{children}</>;
-  }
-
-  const currentRole = activeRole || user?.role;
-  if (currentRole !== "shelter_staff") {
-    return <>{children}</>;
-  }
-
-  // If they have selected an active shelter, they can proceed.
-  if (activeShelterId) {
-    return <>{children}</>;
-  }
-
-  const memberships = user?.memberships || [];
-  if (memberships.length > 0 && !activeShelterId) {
-    // They have access to shelters, but haven't selected one
-    if (location.pathname === "/shelter/dashboard") {
-      return <>{children}</>;
+    const { user, activeRole, activeShelterId } = useAppSelector((state) => state.auth);
+    const navigate = useNavigate();
+    const location = useLocation();
+    if (location.pathname === "/profile") {
+        return <>{children}</>;
     }
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center p-6">
+    const currentRole = activeRole || user?.role;
+    if (currentRole !== "shelter_staff") {
+        return <>{children}</>;
+    }
+    if (activeShelterId) {
+        return <>{children}</>;
+    }
+    const memberships = user?.memberships || [];
+    if (memberships.length > 0 && !activeShelterId) {
+        if (location.pathname === "/shelter/dashboard") {
+            return <>{children}</>;
+        }
+        return (<div className="min-h-[60vh] flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-gray-100 p-8 text-center space-y-6">
           <div className="mx-auto w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center">
-            <Building2 className="w-8 h-8 text-amber-600" />
+            <Building2 className="w-8 h-8 text-amber-600"/>
           </div>
 
           <div className="space-y-2">
@@ -51,27 +39,21 @@ export default function ShelterGuard({
             </p>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  const applications = user?.staffApplications || [];
-  const hasApproved = applications.some((app) => app.status === "approved");
-  const hasPending = applications.some((app) => app.status === "pending");
-  const hasRejected = applications.some((app) => app.status === "rejected");
-
-  if (hasApproved) {
-    // Note: if hasApproved is true, they usually have memberships. This is a fallback.
-    if (location.pathname === "/shelter/dashboard") return <>{children}</>;
-  }
-
-  // No applications at all
-  if (applications.length === 0) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center p-6">
+      </div>);
+    }
+    const applications = user?.staffApplications || [];
+    const hasApproved = applications.some((app) => app.status === "approved");
+    const hasPending = applications.some((app) => app.status === "pending");
+    const hasRejected = applications.some((app) => app.status === "rejected");
+    if (hasApproved) {
+        if (location.pathname === "/shelter/dashboard")
+            return <>{children}</>;
+    }
+    if (applications.length === 0) {
+        return (<div className="min-h-[60vh] flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-gray-100 p-8 text-center space-y-6">
           <div className="mx-auto w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center">
-            <Building2 className="w-8 h-8 text-amber-600" />
+            <Building2 className="w-8 h-8 text-amber-600"/>
           </div>
 
           <div className="space-y-2">
@@ -85,31 +67,24 @@ export default function ShelterGuard({
           </div>
 
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5"/>
             <p className="text-sm text-amber-800 text-left">
               This ensures that you only manage pets and applications for
               shelters you are authorized to work for.
             </p>
           </div>
 
-          <button
-            onClick={() => navigate("/profile")}
-            className="w-full btn btn-primary py-3 text-base font-semibold shadow-lg shadow-primary-200"
-          >
+          <button onClick={() => navigate("/profile")} className="w-full btn btn-primary py-3 text-base font-semibold shadow-lg shadow-primary-200">
             Go to Profile & Apply to Shelters
           </button>
         </div>
-      </div>
-    );
-  }
-
-  // Pending
-  if (hasPending) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center p-6">
+      </div>);
+    }
+    if (hasPending) {
+        return (<div className="min-h-[60vh] flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-gray-100 p-8 text-center space-y-6">
           <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
-            <Clock className="w-8 h-8 text-blue-600 animate-pulse" />
+            <Clock className="w-8 h-8 text-blue-600 animate-pulse"/>
           </div>
 
           <div className="space-y-2">
@@ -123,31 +98,24 @@ export default function ShelterGuard({
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"/>
             <p className="text-sm text-blue-800 text-left">
               You will be able to access shelter management features once at
               least one request is approved.
             </p>
           </div>
 
-          <button
-            onClick={() => navigate("/profile")}
-            className="w-full btn bg-gray-200 text-gray-700 hover:bg-gray-300 py-3 text-base font-semibold"
-          >
+          <button onClick={() => navigate("/profile")} className="w-full btn bg-gray-200 text-gray-700 hover:bg-gray-300 py-3 text-base font-semibold">
             View Applications
           </button>
         </div>
-      </div>
-    );
-  }
-
-  // Only Rejected
-  if (hasRejected) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center p-6">
+      </div>);
+    }
+    if (hasRejected) {
+        return (<div className="min-h-[60vh] flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-gray-100 p-8 text-center space-y-6">
           <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
-            <XCircle className="w-8 h-8 text-red-600" />
+            <XCircle className="w-8 h-8 text-red-600"/>
           </div>
 
           <div className="space-y-2">
@@ -160,16 +128,11 @@ export default function ShelterGuard({
             </p>
           </div>
 
-          <button
-            onClick={() => navigate("/profile")}
-            className="w-full btn btn-primary py-3 text-base font-semibold shadow-lg shadow-primary-200"
-          >
+          <button onClick={() => navigate("/profile")} className="w-full btn btn-primary py-3 text-base font-semibold shadow-lg shadow-primary-200">
             Go to Profile & Try Again
           </button>
         </div>
-      </div>
-    );
-  }
-
-  return <>{children}</>;
+      </div>);
+    }
+    return <>{children}</>;
 }

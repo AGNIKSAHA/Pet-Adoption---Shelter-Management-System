@@ -1,75 +1,50 @@
 import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import {
-  MapPin,
-  Heart,
-  Share2,
-  CheckCircle,
-  Info,
-  Loader2,
-  MessageCircle,
-  PawPrint,
-} from "lucide-react";
+import { MapPin, Heart, Share2, CheckCircle, Info, Loader2, MessageCircle, PawPrint, } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "../../lib/api";
 import { Pet, Shelter } from "../../types";
 import { formatAge } from "../../lib/format";
 import { useAppDispatch, useAppSelector } from "../../store/store";
 import { setActiveShelter } from "../../store/slices/authSlice";
-
 export default function PetDetail() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const dispatch = useAppDispatch();
-  const { user } = useAppSelector((state) => state.auth);
-
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["pet", id],
-    queryFn: async () => {
-      const response = await api.get(`/pets/${id}`);
-      return response.data;
-    },
-    enabled: !!id,
-  });
-
-  const pet: Pet | undefined = data?.data?.pet;
-  const [activeImage, setActiveImage] = useState<string>("");
-
-  // Set active image when pet data loads
-  if (pet && !activeImage && pet.photos?.[0]) {
-    setActiveImage(pet.photos[0]);
-  }
-
-  if (!id) {
-    return (
-      <div className="container mx-auto px-4 py-8">
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const dispatch = useAppDispatch();
+    const { user } = useAppSelector((state) => state.auth);
+    const { data, isLoading, isError } = useQuery({
+        queryKey: ["pet", id],
+        queryFn: async () => {
+            const response = await api.get(`/pets/${id}`);
+            return response.data;
+        },
+        enabled: !!id,
+    });
+    const pet: Pet | undefined = data?.data?.pet;
+    const [activeImage, setActiveImage] = useState<string>("");
+    if (pet && !activeImage && pet.photos?.[0]) {
+        setActiveImage(pet.photos[0]);
+    }
+    if (!id) {
+        return (<div className="container mx-auto px-4 py-8">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900">Pet not found</h1>
           <p className="text-gray-500 mt-2">
             The pet you're looking for doesn't exist.
           </p>
-          <Link
-            to="/pets"
-            className="text-primary-600 hover:text-primary-700 mt-4 inline-block"
-          >
+          <Link to="/pets" className="text-primary-600 hover:text-primary-700 mt-4 inline-block">
             Browse all pets
           </Link>
         </div>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-12 h-12 animate-spin text-primary-600" />
-      </div>
-    );
-  }
-
-  if (isError || !pet) {
-    return (
-      <div className="container mx-auto px-4 py-8">
+      </div>);
+    }
+    if (isLoading) {
+        return (<div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-12 h-12 animate-spin text-primary-600"/>
+      </div>);
+    }
+    if (isError || !pet) {
+        return (<div className="container mx-auto px-4 py-8">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900">
             Error loading pet
@@ -77,36 +52,25 @@ export default function PetDetail() {
           <p className="text-gray-500 mt-2">
             We couldn't load the pet details. Please try again.
           </p>
-          <button
-            onClick={() => navigate("/pets")}
-            className="btn btn-primary mt-4"
-          >
+          <button onClick={() => navigate("/pets")} className="btn btn-primary mt-4">
             Browse all pets
           </button>
         </div>
-      </div>
-    );
-  }
-
-  const shelter =
-    typeof pet.shelterId === "object" ? (pet.shelterId as Shelter) : null;
-  const shelterId =
-    shelter?._id || (typeof pet.shelterId === "string" ? pet.shelterId : "");
-  const displayImage =
-    activeImage ||
-    pet.photos?.[0] ||
-    "https://images.unsplash.com/photo-1543466835-00a7907e9de1";
-
-  const handleAskQuestion = () => {
-    if ((user?.roles || []).includes("adopter") || user?.role === "adopter") {
-      dispatch(setActiveShelter({ shelterId: null, role: "adopter" }));
+      </div>);
     }
-    navigate(`/messages?shelterId=${shelterId}`);
-  };
-
-  return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Breadcrumb */}
+    const shelter = typeof pet.shelterId === "object" ? (pet.shelterId as Shelter) : null;
+    const shelterId = shelter?._id || (typeof pet.shelterId === "string" ? pet.shelterId : "");
+    const displayImage = activeImage ||
+        pet.photos?.[0] ||
+        "https://images.unsplash.com/photo-1543466835-00a7907e9de1";
+    const handleAskQuestion = () => {
+        if ((user?.roles || []).includes("adopter") || user?.role === "adopter") {
+            dispatch(setActiveShelter({ shelterId: null, role: "adopter" }));
+        }
+        navigate(`/messages?shelterId=${shelterId}`);
+    };
+    return (<div className="container mx-auto px-4 py-8">
+      
       <nav className="text-sm text-gray-500 mb-6">
         <Link to="/" className="hover:text-primary-600">
           Home
@@ -120,29 +84,15 @@ export default function PetDetail() {
       </nav>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column - Images */}
+        
         <div className="lg:col-span-2 space-y-4">
           <div className="aspect-video bg-gray-100 rounded-2xl overflow-hidden">
-            <img
-              src={displayImage}
-              alt={pet.name}
-              className="w-full h-full object-cover"
-            />
+            <img src={displayImage} alt={pet.name} className="w-full h-full object-cover"/>
           </div>
           <div className="grid grid-cols-4 gap-4">
-            {pet.photos?.map((photo: string, index: number) => (
-              <button
-                key={index}
-                onClick={() => setActiveImage(photo)}
-                className={`aspect-square rounded-lg overflow-hidden border-2 transition-all ${activeImage === photo ? "border-primary-600 ring-2 ring-primary-100" : "border-transparent hover:border-gray-200"}`}
-              >
-                <img
-                  src={photo}
-                  alt={`${pet.name} ${index + 1}`}
-                  className="w-full h-full object-cover"
-                />
-              </button>
-            ))}
+            {pet.photos?.map((photo: string, index: number) => (<button key={index} onClick={() => setActiveImage(photo)} className={`aspect-square rounded-lg overflow-hidden border-2 transition-all ${activeImage === photo ? "border-primary-600 ring-2 ring-primary-100" : "border-transparent hover:border-gray-200"}`}>
+                <img src={photo} alt={`${pet.name} ${index + 1}`} className="w-full h-full object-cover"/>
+              </button>))}
           </div>
 
           <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 mt-8">
@@ -154,26 +104,26 @@ export default function PetDetail() {
             <h3 className="text-lg font-semibold mb-3">Health & Medical</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="flex items-center gap-2 text-gray-700">
-                <CheckCircle className="w-5 h-5 text-green-500" />
+                <CheckCircle className="w-5 h-5 text-green-500"/>
                 <span>Vaccinations up to date</span>
               </div>
               <div className="flex items-center gap-2 text-gray-700">
-                <CheckCircle className="w-5 h-5 text-green-500" />
+                <CheckCircle className="w-5 h-5 text-green-500"/>
                 <span>Spayed / Neutered</span>
               </div>
               <div className="flex items-center gap-2 text-gray-700">
-                <CheckCircle className="w-5 h-5 text-green-500" />
+                <CheckCircle className="w-5 h-5 text-green-500"/>
                 <span>Microchipped</span>
               </div>
               <div className="flex items-center gap-2 text-gray-700">
-                <Info className="w-5 h-5 text-blue-500" />
+                <Info className="w-5 h-5 text-blue-500"/>
                 <span>No special needs</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right Column - Info & Actions */}
+        
         <div className="space-y-6">
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 sticky top-24">
             <div className="flex justify-between items-start mb-6">
@@ -182,16 +132,16 @@ export default function PetDetail() {
                   {pet.name}
                 </h1>
                 <div className="flex items-center text-gray-500">
-                  <MapPin className="w-4 h-4 mr-1" />
+                  <MapPin className="w-4 h-4 mr-1"/>
                   {shelter?.address?.city || "Location not available"}
                 </div>
               </div>
               <div className="flex gap-2">
                 <button className="p-2 rounded-full bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
-                  <Heart className="w-6 h-6" />
+                  <Heart className="w-6 h-6"/>
                 </button>
                 <button className="p-2 rounded-full bg-gray-50 hover:bg-blue-50 text-gray-400 hover:text-blue-500 transition-colors">
-                  <Share2 className="w-6 h-6" />
+                  <Share2 className="w-6 h-6"/>
                 </button>
               </div>
             </div>
@@ -230,19 +180,12 @@ export default function PetDetail() {
             </div>
 
             <div className="space-y-3">
-              <Link
-                to={`/adopter/apply/${pet._id}`}
-                className="btn btn-primary w-full py-3 text-lg flex items-center justify-center gap-2"
-              >
-                <PawPrint className="w-5 h-5" />
+              <Link to={`/adopter/apply/${pet._id}`} className="btn btn-primary w-full py-3 text-lg flex items-center justify-center gap-2">
+                <PawPrint className="w-5 h-5"/>
                 Apply to Adopt
               </Link>
-              <button
-                type="button"
-                onClick={handleAskQuestion}
-                className="btn btn-outline w-full py-3 text-lg flex items-center justify-center gap-2"
-              >
-                <MessageCircle className="w-5 h-5" />
+              <button type="button" onClick={handleAskQuestion} className="btn btn-outline w-full py-3 text-lg flex items-center justify-center gap-2">
+                <MessageCircle className="w-5 h-5"/>
                 Ask a Question
               </button>
             </div>
@@ -268,6 +211,5 @@ export default function PetDetail() {
           </div>
         </div>
       </div>
-    </div>
-  );
+    </div>);
 }

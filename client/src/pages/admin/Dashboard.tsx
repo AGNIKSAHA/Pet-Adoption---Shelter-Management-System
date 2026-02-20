@@ -1,80 +1,62 @@
 import { Link } from "react-router-dom";
-import {
-  Users,
-  Building2,
-  PawPrint,
-  TrendingUp,
-  AlertTriangle,
-} from "lucide-react";
+import { Users, Building2, PawPrint, TrendingUp, AlertTriangle, } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "../../lib/api";
-
 export default function Dashboard() {
-  const { data: dashboardData, isLoading } = useQuery({
-    queryKey: ["admin-dashboard"],
-    queryFn: async () => {
-      const response = await api.get("/dashboard/admin");
-      return response.data;
-    },
-  });
-
-  const dashboardStats = dashboardData?.data?.stats || {};
-  const intakeCohorts = dashboardData?.data?.analytics?.intakeCohorts || [];
-
-  const stats = [
-    {
-      label: "Total Shelters",
-      value: dashboardStats.totalShelters?.toLocaleString() || "0",
-      icon: Building2,
-      color: "bg-blue-50 text-blue-600",
-    },
-    {
-      label: "Total Users",
-      value: dashboardStats.totalUsers?.toLocaleString() || "0",
-      icon: Users,
-      color: "bg-purple-50 text-purple-600",
-    },
-    {
-      label: "Total Pets",
-      value: dashboardStats.totalPets?.toLocaleString() || "0",
-      icon: PawPrint,
-      color: "bg-orange-50 text-orange-600",
-    },
-    {
-      label: "Adoptions YTD",
-      value: dashboardStats.adoptionsYTD?.toLocaleString() || "0",
-      icon: TrendingUp,
-      color: "bg-green-50 text-green-600",
-    },
-    {
-      label: "Pending Staff",
-      value: dashboardStats.pendingShelterRequests?.toLocaleString() || "0",
-      icon: AlertTriangle,
-      color: "bg-yellow-50 text-yellow-600",
-    },
-  ];
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-8">
+    const { data: dashboardData, isLoading } = useQuery({
+        queryKey: ["admin-dashboard"],
+        queryFn: async () => {
+            const response = await api.get("/dashboard/admin");
+            return response.data;
+        },
+    });
+    const dashboardStats = dashboardData?.data?.stats || {};
+    const intakeCohorts = dashboardData?.data?.analytics?.intakeCohorts || [];
+    const stats = [
+        {
+            label: "Total Shelters",
+            value: dashboardStats.totalShelters?.toLocaleString() || "0",
+            icon: Building2,
+            color: "bg-blue-50 text-blue-600",
+        },
+        {
+            label: "Total Users",
+            value: dashboardStats.totalUsers?.toLocaleString() || "0",
+            icon: Users,
+            color: "bg-purple-50 text-purple-600",
+        },
+        {
+            label: "Total Pets",
+            value: dashboardStats.totalPets?.toLocaleString() || "0",
+            icon: PawPrint,
+            color: "bg-orange-50 text-orange-600",
+        },
+        {
+            label: "Adoptions YTD",
+            value: dashboardStats.adoptionsYTD?.toLocaleString() || "0",
+            icon: TrendingUp,
+            color: "bg-green-50 text-green-600",
+        },
+        {
+            label: "Pending Staff",
+            value: dashboardStats.pendingShelterRequests?.toLocaleString() || "0",
+            icon: AlertTriangle,
+            color: "bg-yellow-50 text-yellow-600",
+        },
+    ];
+    if (isLoading) {
+        return (<div className="flex items-center justify-center h-64">
+        <div className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin"/>
+      </div>);
+    }
+    return (<div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
         <p className="text-gray-500">Platform-wide overview and management.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat) => (
-          <div
-            key={stat.label}
-            className="bg-white p-6 rounded-xl shadow-sm border border-gray-100"
-          >
+        {stats.map((stat) => (<div key={stat.label} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm text-gray-500 font-medium">
@@ -85,11 +67,10 @@ export default function Dashboard() {
                 </p>
               </div>
               <div className={`p-3 rounded-lg ${stat.color}`}>
-                <stat.icon className="w-6 h-6" />
+                <stat.icon className="w-6 h-6"/>
               </div>
             </div>
-          </div>
-        ))}
+          </div>))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -98,9 +79,8 @@ export default function Dashboard() {
             Pending Approvals
           </h2>
           <div className="space-y-4">
-            {dashboardStats.pendingShelterRequests > 0 && (
-              <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 flex items-start gap-4">
-                <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
+            {dashboardStats.pendingShelterRequests > 0 && (<div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 flex items-start gap-4">
+                <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5"/>
                 <div className="flex-1">
                   <p className="font-semibold text-yellow-800">
                     Pending Staff Requests
@@ -110,16 +90,12 @@ export default function Dashboard() {
                     staff applications waiting for review.
                   </p>
                   <div className="flex gap-3 mt-3">
-                    <Link
-                      to="/admin/shelter-requests"
-                      className="text-xs font-medium bg-white px-3 py-1 rounded border border-yellow-200 text-yellow-700 hover:bg-yellow-50"
-                    >
+                    <Link to="/admin/shelter-requests" className="text-xs font-medium bg-white px-3 py-1 rounded border border-yellow-200 text-yellow-700 hover:bg-yellow-50">
                       Review All
                     </Link>
                   </div>
                 </div>
-              </div>
-            )}
+              </div>)}
 
             <div className="p-4 bg-gray-50 rounded-lg flex items-center justify-between">
               <div>
@@ -168,10 +144,7 @@ export default function Dashboard() {
             Grouped by intake month in each shelter timezone
           </p>
         </div>
-        {intakeCohorts.length === 0 ? (
-          <p className="text-sm text-gray-500">No cohort data available.</p>
-        ) : (
-          <div className="overflow-x-auto">
+        {intakeCohorts.length === 0 ? (<p className="text-sm text-gray-500">No cohort data available.</p>) : (<div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 text-left text-gray-500">
@@ -183,18 +156,13 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {intakeCohorts.map(
-                  (cohort: {
-                    cohortMonth: string;
-                    totalIntake: number;
-                    adopted: number;
-                    inCare: number;
-                    adoptionRate: string;
-                  }) => (
-                    <tr
-                      key={cohort.cohortMonth}
-                      className="border-b border-gray-50"
-                    >
+                {intakeCohorts.map((cohort: {
+                cohortMonth: string;
+                totalIntake: number;
+                adopted: number;
+                inCare: number;
+                adoptionRate: string;
+            }) => (<tr key={cohort.cohortMonth} className="border-b border-gray-50">
                       <td className="py-2 pr-4 font-medium text-gray-900">
                         {cohort.cohortMonth}
                       </td>
@@ -202,14 +170,10 @@ export default function Dashboard() {
                       <td className="py-2 pr-4">{cohort.adopted}</td>
                       <td className="py-2 pr-4">{cohort.inCare}</td>
                       <td className="py-2 pr-4">{cohort.adoptionRate}%</td>
-                    </tr>
-                  ),
-                )}
+                    </tr>))}
               </tbody>
             </table>
-          </div>
-        )}
+          </div>)}
       </div>
-    </div>
-  );
+    </div>);
 }

@@ -1,13 +1,10 @@
 import { Link } from "react-router-dom";
 import { useAppSelector } from "../../store/store";
 import { Heart, Search, Shield, Users } from "lucide-react";
-
 export default function Home() {
-  const { isAuthenticated } = useAppSelector((state) => state.auth);
-
-  return (
-    <div className="min-h-screen">
-      {/* Hero Section */}
+    const { isAuthenticated } = useAppSelector((state) => state.auth);
+    return (<div className="min-h-screen">
+      
       <section className="bg-gradient-to-br from-primary-600 to-primary-800 text-white py-20">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
@@ -19,26 +16,18 @@ export default function Home() {
               adoption journey today.
             </p>
             <div className="flex gap-4 justify-center">
-              <Link
-                to="/pets"
-                className="btn btn-primary bg-white text-primary-600 hover:bg-gray-100 px-8 py-3 text-lg"
-              >
+              <Link to="/pets" className="btn btn-primary bg-white text-primary-600 hover:bg-gray-100 px-8 py-3 text-lg">
                 Browse Pets
               </Link>
-              {!isAuthenticated && (
-                <Link
-                  to="/register"
-                  className="btn btn-outline border-white text-white hover:bg-white hover:text-primary-600 px-8 py-3 text-lg"
-                >
+              {!isAuthenticated && (<Link to="/register" className="btn btn-outline border-white text-white hover:bg-white hover:text-primary-600 px-8 py-3 text-lg">
                   Get Started
-                </Link>
-              )}
+                </Link>)}
             </div>
           </div>
         </div>
       </section>
 
-      {/* Features Section */}
+      
       <section className="py-20 bg-gray-50">
         <div className="container mx-auto px-4">
           <h2 className="text-3xl font-bold text-center mb-12">
@@ -47,7 +36,7 @@ export default function Home() {
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             <div className="card text-center">
               <div className="flex justify-center mb-4">
-                <Search className="w-12 h-12 text-primary-600" />
+                <Search className="w-12 h-12 text-primary-600"/>
               </div>
               <h3 className="text-xl font-semibold mb-2">Advanced Search</h3>
               <p className="text-gray-600">
@@ -58,7 +47,7 @@ export default function Home() {
 
             <div className="card text-center">
               <div className="flex justify-center mb-4">
-                <Shield className="w-12 h-12 text-primary-600" />
+                <Shield className="w-12 h-12 text-primary-600"/>
               </div>
               <h3 className="text-xl font-semibold mb-2">Verified Shelters</h3>
               <p className="text-gray-600">
@@ -69,7 +58,7 @@ export default function Home() {
 
             <div className="card text-center">
               <div className="flex justify-center mb-4">
-                <Heart className="w-12 h-12 text-primary-600" />
+                <Heart className="w-12 h-12 text-primary-600"/>
               </div>
               <h3 className="text-xl font-semibold mb-2">Easy Application</h3>
               <p className="text-gray-600">
@@ -79,7 +68,7 @@ export default function Home() {
 
             <div className="card text-center">
               <div className="flex justify-center mb-4">
-                <Users className="w-12 h-12 text-primary-600" />
+                <Users className="w-12 h-12 text-primary-600"/>
               </div>
               <h3 className="text-xl font-semibold mb-2">Community Support</h3>
               <p className="text-gray-600">
@@ -91,7 +80,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* CTA Section */}
+      
       <section className="py-20 bg-primary-600 text-white">
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-3xl font-bold mb-4">
@@ -101,21 +90,14 @@ export default function Home() {
             Start your adoption journey today or support our mission.
           </p>
           <div className="flex gap-4 justify-center">
-            <Link
-              to="/pets"
-              className="btn bg-white text-primary-600 hover:bg-gray-100 px-8 py-3"
-            >
+            <Link to="/pets" className="btn bg-white text-primary-600 hover:bg-gray-100 px-8 py-3">
               Adopt a Pet
             </Link>
-            <Link
-              to="/register"
-              className="btn border-2 border-white text-white hover:bg-white hover:text-primary-600 px-8 py-3"
-            >
+            <Link to="/register" className="btn border-2 border-white text-white hover:bg-white hover:text-primary-600 px-8 py-3">
               Become a Foster
             </Link>
           </div>
         </div>
       </section>
-    </div>
-  );
+    </div>);
 }

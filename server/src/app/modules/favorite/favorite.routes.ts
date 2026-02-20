@@ -1,17 +1,10 @@
 import { Router } from "express";
 import * as favoriteController from "./favorite.controller";
-import {
-  authenticate,
-  authorize,
-} from "../../common/middlewares/auth.middleware";
-
+import { authenticate, authorize, } from "../../common/middlewares/auth.middleware";
 const router = Router();
-
 router.use(authenticate);
-router.use(authorize("adopter")); // Only adopters can have favorites
-
+router.use(authorize("adopter"));
 router.get("/", favoriteController.getMyFavorites);
 router.post("/toggle", favoriteController.toggleFavorite);
 router.get("/check/:petId", favoriteController.checkIsFavorite);
-
 export default router;

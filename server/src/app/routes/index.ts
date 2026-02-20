@@ -12,10 +12,8 @@ import notificationRoutes from "../modules/notification/notification.routes";
 import { shelterRoutes } from "../modules/shelter/shelter.routes";
 import webhookRoutes from "../modules/webhook/webhook.routes";
 import medicalRoutes from "../modules/medical/medical.routes";
-
 const router = Router();
 router.use("/notifications", notificationRoutes);
-
 router.use("/auth", authRoutes);
 router.use("/pets", petRoutes);
 router.use("/shelters", shelterRoutes);
@@ -28,14 +26,11 @@ router.use("/admin", adminRoutes);
 router.use("/messages", messageRoutes);
 router.use("/medical", medicalRoutes);
 router.use("/webhooks", webhookRoutes);
-
-// Health check
 router.get("/health", (_req, res) => {
-  res.json({
-    success: true,
-    message: "API is running",
-    timestamp: new Date().toISOString(),
-  });
+    res.json({
+        success: true,
+        message: "API is running",
+        timestamp: new Date().toISOString(),
+    });
 });
-
 export default router;

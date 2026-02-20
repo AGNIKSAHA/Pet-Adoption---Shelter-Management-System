@@ -1,20 +1,17 @@
 import { FileText, Heart, CheckCircle } from "lucide-react";
-
 interface DashboardStatsProps {
-  stats: {
-    totalApplications: number;
-    pendingReview: number;
-    approvedApplications: number;
-  };
+    stats: {
+        totalApplications: number;
+        pendingReview: number;
+        approvedApplications: number;
+    };
 }
-
 export default function DashboardStats({ stats }: DashboardStatsProps) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    return (<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
-            <FileText className="w-6 h-6" />
+            <FileText className="w-6 h-6"/>
           </div>
           <div>
             <p className="text-sm text-gray-500 font-medium">
@@ -30,7 +27,7 @@ export default function DashboardStats({ stats }: DashboardStatsProps) {
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-red-50 text-red-600 rounded-lg">
-            <Heart className="w-6 h-6" />
+            <Heart className="w-6 h-6"/>
           </div>
           <div>
             <p className="text-sm text-gray-500 font-medium">Pending Review</p>
@@ -44,7 +41,7 @@ export default function DashboardStats({ stats }: DashboardStatsProps) {
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-green-50 text-green-600 rounded-lg">
-            <CheckCircle className="w-6 h-6" />
+            <CheckCircle className="w-6 h-6"/>
           </div>
           <div>
             <p className="text-sm text-gray-500 font-medium">Adoptions</p>
@@ -54,6 +51,5 @@ export default function DashboardStats({ stats }: DashboardStatsProps) {
           </div>
         </div>
       </div>
-    </div>
-  );
+    </div>);
 }

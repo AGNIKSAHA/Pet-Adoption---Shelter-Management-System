@@ -1,24 +1,21 @@
 import { Notification } from "../../modules/notification/notification.model";
 import { io } from "../../../index";
-
 export const createNotification = async (data: {
-  userId: string;
-  type: "application_update" | "message" | "pet_update" | "system";
-  title: string;
-  message: string;
-  link?: string;
+    userId: string;
+    type: "application_update" | "message" | "pet_update" | "system";
+    title: string;
+    message: string;
+    link?: string;
 }) => {
-  try {
-    const notification = await Notification.create(data);
-
-    // Emit real-time notification if socket is available
-    if (io) {
-      io.to(data.userId.toString()).emit("notification", notification);
+    try {
+        const notification = await Notification.create(data);
+        if (io) {
+            io.to(data.userId.toString()).emit("notification", notification);
+        }
+        return notification;
     }
-
-    return notification;
-  } catch (error) {
-    console.error("Failed to create notification:", error);
-    return undefined;
-  }
+    catch (error) {
+        console.error("Failed to create notification:", error);
+        return undefined;
+    }
 };
