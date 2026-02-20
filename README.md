@@ -20,6 +20,19 @@ A production-ready, scalable full-stack web application for managing animal shel
 - ✅ **Payment Integration**: Stripe for donations
 - ✅ **Audit Logging**: Complete audit trail for compliance
 
+### Recent Updates
+
+- ✅ **Shelter Group Messaging**: Adopters chat with shelter threads (not individual staff DMs), while shelter staff/admin members can jointly read/reply.
+- ✅ **Conversation Handoff with Continuity**: Staff handoff support keeps a seamless adopter-visible thread and tracks internal sender identity per message.
+- ✅ **Role-Aware Message Context**: "Ask a Question" from pet details opens shelter group chat in adopter context.
+- ✅ **Application Review Optimistic Locking**: Concurrent staff updates use version checks (`expectedVersion`) to prevent silent overwrite conflicts.
+- ✅ **Merge Conflict UI**: Staff sees structured merge conflict feedback in the application review modal instead of a generic error.
+- ✅ **Idempotent Email Notifications**: Outbox + dedup key flow prevents duplicate adopter emails on retries/crash recovery.
+- ✅ **Cross-Shelter Pet Transfer Workflow**: Staff-to-staff request/approve/reject transfer flow with data migration support.
+- ✅ **Foster Federation Limit Enforcement**: Max 3 active placements per foster parent across shelters with backend and frontend enforcement.
+- ✅ **Standalone MongoDB Compatibility**: Foster assignment flows automatically fall back when Mongo transactions are unavailable (non-replica local setups).
+- ✅ **Vaccination Audit Integrity**: Append-only vaccination records with correction entries and full history preservation.
+
 ### Security & Quality
 
 - ✅ JWT Authentication with refresh tokens
@@ -273,8 +286,17 @@ intake → medical_hold → available → meet → adopted
 - `POST /api/v1/applications` - Submit application (Adopter)
 - `GET /api/v1/applications` - List applications
 - `GET /api/v1/applications/:id` - Get application details
-- `PATCH /api/v1/applications/:id/status` - Update status (Staff/Admin)
+- `PATCH /api/v1/applications/:id/status` - Update status (Staff/Admin, optimistic locking with `expectedVersion`)
 - `PATCH /api/v1/applications/:id/withdraw` - Withdraw application (Adopter)
+
+### Messaging
+
+- `GET /api/v1/messages/conversations` - List user conversations
+- `POST /api/v1/messages/conversations/start` - Start or open conversation (supports shelter-thread start)
+- `GET /api/v1/messages/conversations/:conversationId/messages` - Fetch messages by conversation
+- `POST /api/v1/messages/conversations/:conversationId/messages` - Send message in conversation
+- `PATCH /api/v1/messages/conversations/:conversationId/read` - Mark conversation as read
+- `PATCH /api/v1/messages/conversations/:conversationId/handoff` - Transfer conversation ownership
 
 See `server/README.md` for complete API documentation.
 
