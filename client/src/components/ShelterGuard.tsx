@@ -2,34 +2,67 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAppSelector } from "../store/store";
 import { Building2, AlertCircle, Clock, XCircle } from "lucide-react";
 
-/**
- * ShelterGuard: Ensures shelter staff has selected at least one shelter and been approved before accessing shelter features
- */
 export default function ShelterGuard({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user } = useAppSelector((state) => state.auth);
+  const { user, activeRole, activeShelterId } = useAppSelector(
+    (state) => state.auth,
+  );
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Allow profile access always
   if (location.pathname === "/profile") {
     return <>{children}</>;
   }
 
-  if (user?.role !== "shelter_staff") {
+  const currentRole = activeRole || user?.role;
+  if (currentRole !== "shelter_staff") {
     return <>{children}</>;
   }
 
-  const applications = user.staffApplications || [];
+  // If they have selected an active shelter, they can proceed.
+  if (activeShelterId) {
+    return <>{children}</>;
+  }
+
+  const memberships = user?.memberships || [];
+  if (memberships.length > 0 && !activeShelterId) {
+    // They have access to shelters, but haven't selected one
+    if (location.pathname === "/shelter/dashboard") {
+      return <>{children}</>;
+    }
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-gray-100 p-8 text-center space-y-6">
+          <div className="mx-auto w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center">
+            <Building2 className="w-8 h-8 text-amber-600" />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-gray-900">
+              Select a Shelter
+            </h2>
+            <p className="text-gray-600">
+              Please select a specific shelter context from the sidebar or top
+              navigation to perform operations like managing pets and
+              applications.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const applications = user?.staffApplications || [];
   const hasApproved = applications.some((app) => app.status === "approved");
   const hasPending = applications.some((app) => app.status === "pending");
   const hasRejected = applications.some((app) => app.status === "rejected");
 
   if (hasApproved) {
-    return <>{children}</>;
+    // Note: if hasApproved is true, they usually have memberships. This is a fallback.
+    if (location.pathname === "/shelter/dashboard") return <>{children}</>;
   }
 
   // No applications at all

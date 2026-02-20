@@ -14,10 +14,14 @@ import { useQuery } from "@tanstack/react-query";
 import api from "../../lib/api";
 import { Pet, Shelter } from "../../types";
 import { formatAge } from "../../lib/format";
+import { useAppDispatch, useAppSelector } from "../../store/store";
+import { setActiveShelter } from "../../store/slices/authSlice";
 
 export default function PetDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+  const { user } = useAppSelector((state) => state.auth);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["pet", id],
@@ -86,10 +90,19 @@ export default function PetDetail() {
 
   const shelter =
     typeof pet.shelterId === "object" ? (pet.shelterId as Shelter) : null;
+  const shelterId =
+    shelter?._id || (typeof pet.shelterId === "string" ? pet.shelterId : "");
   const displayImage =
     activeImage ||
     pet.photos?.[0] ||
     "https://images.unsplash.com/photo-1543466835-00a7907e9de1";
+
+  const handleAskQuestion = () => {
+    if ((user?.roles || []).includes("adopter") || user?.role === "adopter") {
+      dispatch(setActiveShelter({ shelterId: null, role: "adopter" }));
+    }
+    navigate(`/messages?shelterId=${shelterId}`);
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -224,13 +237,14 @@ export default function PetDetail() {
                 <PawPrint className="w-5 h-5" />
                 Apply to Adopt
               </Link>
-              <Link
-                to={`/messages?userId=${pet.contactPerson?._id || shelter?._id || pet.shelterId}`}
+              <button
+                type="button"
+                onClick={handleAskQuestion}
                 className="btn btn-outline w-full py-3 text-lg flex items-center justify-center gap-2"
               >
                 <MessageCircle className="w-5 h-5" />
                 Ask a Question
-              </Link>
+              </button>
             </div>
 
             <div className="mt-8 pt-6 border-t border-gray-100">

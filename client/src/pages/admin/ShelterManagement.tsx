@@ -197,6 +197,10 @@ export default function ShelterManagement() {
                     <Phone className="w-4 h-4 text-primary-500" />
                     {shelter.phone}
                   </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <span className="text-primary-500 font-semibold">TZ</span>
+                    {shelter.timezone || "UTC"}
+                  </div>
                 </div>
 
                 <div className="pt-4 border-t border-gray-50 flex items-center justify-between text-sm">

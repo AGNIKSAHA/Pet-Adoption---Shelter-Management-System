@@ -8,6 +8,24 @@ import { StaffApplication } from "../shelter/staff-application.model";
 import { AuditLog } from "../audit/audit.model";
 import { catchAsync } from "../../common/middlewares/catch.middleware";
 
+const getCohortMonthKey = (date: Date, timezone?: string) => {
+  const fallbackTimezone = "UTC";
+  const safeTimezone = timezone || fallbackTimezone;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: safeTimezone,
+      year: "numeric",
+      month: "2-digit",
+    }).formatToParts(date);
+    const year = parts.find((p) => p.type === "year")?.value;
+    const month = parts.find((p) => p.type === "month")?.value;
+    if (!year || !month) return "unknown";
+    return `${year}-${month}`;
+  } catch {
+    return getCohortMonthKey(date, fallbackTimezone);
+  }
+};
+
 export const getShelterDashboardStats = catchAsync(
   async (req: Request, res: Response) => {
     let shelterId: string | undefined;
@@ -144,6 +162,8 @@ export const getAdminDashboardStats = catchAsync(
       totalPets,
       adoptionsYTD,
       pendingShelterRequests,
+      allShelters,
+      allPetsForCohorts,
     ] = await Promise.all([
       Shelter.countDocuments({ isActive: true }),
       User.countDocuments({ isActive: true }),
@@ -155,7 +175,51 @@ export const getAdminDashboardStats = catchAsync(
       StaffApplication.countDocuments({
         status: "pending",
       }),
+      Shelter.find({ isActive: true }).select("_id timezone"),
+      Pet.find({ isActive: true }).select("intakeDate status shelterId"),
     ]);
+
+    const shelterTimezoneMap = new Map(
+      allShelters.map((shelter) => [
+        shelter._id.toString(),
+        (shelter as unknown as { timezone?: string }).timezone || "UTC",
+      ]),
+    );
+
+    const cohortsMap = new Map<
+      string,
+      { cohortMonth: string; totalIntake: number; adopted: number; inCare: number }
+    >();
+
+    allPetsForCohorts.forEach((pet) => {
+      const shelterId = String(pet.shelterId);
+      const timezone = shelterTimezoneMap.get(shelterId) || "UTC";
+      const cohortMonth = getCohortMonthKey(new Date(pet.intakeDate), timezone);
+
+      const existing = cohortsMap.get(cohortMonth) || {
+        cohortMonth,
+        totalIntake: 0,
+        adopted: 0,
+        inCare: 0,
+      };
+
+      existing.totalIntake += 1;
+      if (pet.status === "adopted") {
+        existing.adopted += 1;
+      } else {
+        existing.inCare += 1;
+      }
+      cohortsMap.set(cohortMonth, existing);
+    });
+
+    const intakeCohorts = Array.from(cohortsMap.values())
+      .sort((a, b) => (a.cohortMonth < b.cohortMonth ? -1 : 1))
+      .map((cohort) => ({
+        ...cohort,
+        adoptionRate: Number(
+          ((cohort.adopted / Math.max(cohort.totalIntake, 1)) * 100).toFixed(2),
+        ),
+      }));
 
     res.json({
       success: true,
@@ -166,6 +230,10 @@ export const getAdminDashboardStats = catchAsync(
           totalPets,
           adoptionsYTD,
           pendingShelterRequests,
+        },
+        analytics: {
+          intakeCohorts,
+          timezoneMode: "per-shelter",
         },
       },
     });

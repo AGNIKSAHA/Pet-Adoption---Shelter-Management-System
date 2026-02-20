@@ -11,10 +11,22 @@ import {
 import api from "../../lib/api";
 import toast from "react-hot-toast";
 import { StaffApplication } from "../../types";
-import { AxiosError } from "axios";
+import axios, { AxiosError } from "axios";
 
 export default function ShelterRequests() {
   const queryClient = useQueryClient();
+
+  const withAuthRetry = async <T,>(fn: () => Promise<T>) => {
+    try {
+      return await fn();
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        await api.post("/auth/refresh");
+        return await fn();
+      }
+      throw error;
+    }
+  };
 
   const { data: requests, isLoading } = useQuery({
     queryKey: ["shelter-requests"],
@@ -26,7 +38,9 @@ export default function ShelterRequests() {
 
   const approveMutation = useMutation({
     mutationFn: (userId: string) =>
-      api.patch(`/admin/shelter-requests/${userId}/approve`),
+      withAuthRetry(() =>
+        api.patch(`/admin/shelter-requests/${userId}/approve`),
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["shelter-requests"] });
       toast.success("Shelter request approved!");
@@ -38,7 +52,9 @@ export default function ShelterRequests() {
 
   const rejectMutation = useMutation({
     mutationFn: (userId: string) =>
-      api.patch(`/admin/shelter-requests/${userId}/reject`),
+      withAuthRetry(() =>
+        api.patch(`/admin/shelter-requests/${userId}/reject`),
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["shelter-requests"] });
       toast.success("Shelter request rejected");
@@ -67,7 +83,7 @@ export default function ShelterRequests() {
         <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-gray-100">
           <Clock className="w-16 h-16 text-gray-200 mx-auto mb-4" />
           <p className="text-gray-500 font-medium">
-            No pending shelter requests
+            No pending or rejected shelter requests
           </p>
         </div>
       ) : (
@@ -114,6 +130,10 @@ export default function ShelterRequests() {
                     </div>
                   )}
 
+                  <div className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider bg-gray-100 text-gray-700">
+                    {request.status}
+                  </div>
+
                   {/* Request Date */}
                   <div className="flex items-center gap-2 text-xs text-gray-400">
                     <Clock className="w-4 h-4" />
@@ -138,20 +158,22 @@ export default function ShelterRequests() {
                     ) : (
                       <CheckCircle className="w-4 h-4" />
                     )}
-                    Approve
+                    {request.status === "rejected" ? "Approve Again" : "Approve"}
                   </button>
-                  <button
-                    onClick={() => rejectMutation.mutate(request._id)}
-                    disabled={rejectMutation.isPending}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium"
-                  >
-                    {rejectMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <XCircle className="w-4 h-4" />
-                    )}
-                    Reject
-                  </button>
+                  {request.status === "pending" && (
+                    <button
+                      onClick={() => rejectMutation.mutate(request._id)}
+                      disabled={rejectMutation.isPending}
+                      className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium"
+                    >
+                      {rejectMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <XCircle className="w-4 h-4" />
+                      )}
+                      Reject
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

@@ -1,12 +1,15 @@
 import { useEffect } from "react";
 import { socket } from "../lib/socket";
-import { useAppSelector } from "../store/store";
+import { useAppSelector, useAppDispatch } from "../store/store";
+import { setUser } from "../store/slices/authSlice";
 import { useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { Notification } from "../types";
+import api from "../lib/api";
 
 export default function SocketHandler() {
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
+  const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -17,9 +20,19 @@ export default function SocketHandler() {
 
       socket.emit("join", user.id || user._id);
 
-      const handleNotification = (notification: Notification) => {
+      const handleNotification = async (notification: Notification) => {
         // Refresh notifications query
         queryClient.invalidateQueries({ queryKey: ["notifications"] });
+
+        // Keep staff context synced when a shelter is removed/changed by admin.
+        if (notification.type === "system") {
+          try {
+            const response = await api.get("/auth/me");
+            dispatch(setUser(response.data.data.user));
+          } catch {
+            // Non-blocking refresh attempt.
+          }
+        }
 
         // Show a toast
         toast.success(notification.title, {
@@ -33,17 +46,24 @@ export default function SocketHandler() {
         queryClient.invalidateQueries({ queryKey: ["messages"] });
       };
 
+      const handleConversationHandoff = () => {
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        queryClient.invalidateQueries({ queryKey: ["messages"] });
+      };
+
       socket.on("notification", handleNotification);
       socket.on("chat_message", handleChatMessage);
+      socket.on("conversation_handoff", handleConversationHandoff);
 
       return () => {
         socket.off("notification", handleNotification);
         socket.off("chat_message", handleChatMessage);
+        socket.off("conversation_handoff", handleConversationHandoff);
       };
     } else {
       socket.disconnect();
     }
-  }, [isAuthenticated, user, queryClient]);
+  }, [isAuthenticated, user, queryClient, dispatch]);
 
   return null;
 }

@@ -9,6 +9,10 @@ import { IUser } from "../user/user.model";
 import { AppError } from "../../common/middlewares/error.middleware";
 import { AuditLog } from "../audit/audit.model";
 import { createNotification } from "../../common/utils/notification.util";
+import {
+  buildApplicationStatusDedupKey,
+  enqueueApplicationStatusEmail,
+} from "../../common/utils/email-outbox.util";
 
 export const createApplicationInDB = async (
   data: {
@@ -228,14 +232,14 @@ export const getApplicationByIdFromDB = async (
 
 export const updateApplicationStatusInDB = async (
   id: string,
-  data: { status: ApplicationStatus; notes?: string },
+  data: { status: ApplicationStatus; notes?: string; expectedVersion?: number },
   userId: string,
   role: string,
   shelterIdFromToken?: string,
   ip?: string,
   userAgent?: string,
 ) => {
-  const { status, notes } = data;
+  const { status, notes, expectedVersion } = data;
 
   const application =
     await Application.findById(id).populate("petId adopterId");
@@ -282,16 +286,59 @@ export const updateApplicationStatusInDB = async (
     }
   }
 
-  const oldStatus = application.status;
-  application.status = status;
-  application.reviewedBy = new mongoose.Types.ObjectId(userId);
-  application.reviewedAt = new Date();
-  if (notes) application.notes = notes;
+  if (!Number.isInteger(expectedVersion)) {
+    throw new AppError(
+      400,
+      "expectedVersion is required for concurrent-safe reviews",
+    );
+  }
 
-  await application.save();
+  const oldStatus = application.status;
+  const updatePayload: Record<string, unknown> = {
+    status,
+    reviewedBy: new mongoose.Types.ObjectId(userId),
+    reviewedAt: new Date(),
+  };
+  if (notes !== undefined) {
+    updatePayload.notes = notes;
+  }
+
+  const updatedWithLock = await Application.findOneAndUpdate(
+    { _id: id, __v: expectedVersion },
+    {
+      $set: updatePayload,
+      $inc: { __v: 1 },
+    },
+    { new: true },
+  );
+
+  if (!updatedWithLock) {
+    const latest = await Application.findById(id)
+      .populate("petId", "name species breed photos")
+      .populate("adopterId", "firstName lastName email phone")
+      .populate("shelterId", "name")
+      .populate("reviewedBy", "firstName lastName");
+
+    throw new AppError(
+      409,
+      "Merge conflict: this application was updated by another reviewer",
+      true,
+      {
+        code: "APPLICATION_VERSION_CONFLICT",
+        currentApplication: latest,
+      },
+    );
+  }
+
+  const updatedApplication = await Application.findById(id).populate(
+    "petId adopterId",
+  );
+  if (!updatedApplication) {
+    throw new AppError(404, "Application not found");
+  }
 
   if (status === "approved") {
-    const pet = await Pet.findById(application.petId);
+    const pet = await Pet.findById(updatedApplication.petId);
     if (pet && pet.status === "available") {
       pet.status = "adopted";
       pet.adoptionDate = new Date();
@@ -300,52 +347,54 @@ export const updateApplicationStatusInDB = async (
   }
 
   // Queue notification and email as background jobs (non-blocking)
-  const { notificationQueue, emailQueue } = await import("../../../queues");
+  const { notificationQueue } = await import("../../../queues");
 
   notificationQueue
     .add({
-      userId: application.adopterId._id.toString(),
+      userId: updatedApplication.adopterId._id.toString(),
       type: "application_update",
       title: "Application Status Update",
-      message: `Your application for ${(application.petId as unknown as IPet).name} has been ${status}`,
-      link: `/applications/${application._id}`,
+      message: `Your application for ${(updatedApplication.petId as unknown as IPet).name} has been ${status}`,
+      link: `/applications/${updatedApplication._id}`,
     })
     .catch(console.error);
 
-  emailQueue
-    .add({
-      email: (application.adopterId as unknown as IUser).email,
-      petName: (application.petId as unknown as IPet).name,
+  enqueueApplicationStatusEmail({
+    dedupKey: buildApplicationStatusDedupKey(
+      updatedApplication._id.toString(),
       status,
-    })
-    .catch(console.error);
+    ),
+    to: (updatedApplication.adopterId as unknown as IUser).email,
+    petName: (updatedApplication.petId as unknown as IPet).name,
+    status,
+  }).catch(console.error);
 
   // Trigger webhooks for application status update
   const { triggerWebhooks } = await import("../webhook/webhook.service");
   triggerWebhooks(`application.${status}`, {
-    applicationId: application._id.toString(),
-    petId: application.petId._id.toString(),
-    petName: (application.petId as unknown as IPet).name,
-    shelterId: application.shelterId.toString(),
-    adopterId: application.adopterId._id.toString(),
-    adopterEmail: (application.adopterId as unknown as IUser).email,
+    applicationId: updatedApplication._id.toString(),
+    petId: updatedApplication.petId._id.toString(),
+    petName: (updatedApplication.petId as unknown as IPet).name,
+    shelterId: updatedApplication.shelterId.toString(),
+    adopterId: updatedApplication.adopterId._id.toString(),
+    adopterEmail: (updatedApplication.adopterId as unknown as IUser).email,
     status,
     reviewedBy: userId,
-    reviewedAt: application.reviewedAt,
-    notes: application.notes,
+    reviewedAt: updatedApplication.reviewedAt,
+    notes: updatedApplication.notes,
   }).catch(console.error);
 
   await AuditLog.create({
     userId,
     action: "update_application_status",
     resource: "application",
-    resourceId: application._id,
+    resourceId: updatedApplication._id,
     changes: { oldStatus, newStatus: status, notes },
     ipAddress: ip,
     userAgent,
   });
 
-  return application;
+  return updatedApplication;
 };
 
 export const withdrawApplicationInDB = async (

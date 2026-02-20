@@ -22,10 +22,17 @@ export const registerValidation = [
     .withMessage("Last name is required")
     .isLength({ min: 2 })
     .withMessage("Last name must be at least 2 characters"),
-  body("role")
+  body("roles")
     .optional()
-    .isIn(["adopter", "shelter_staff", "admin"])
-    .withMessage("Invalid role"),
+    .isArray()
+    .withMessage("Roles must be an array")
+    .custom((roles) => {
+      const validRoles = ["adopter", "shelter_staff", "admin"];
+      if (roles.some((role: string) => !validRoles.includes(role))) {
+        throw new Error("Invalid role specified");
+      }
+      return true;
+    }),
 ];
 
 export const loginValidation = [

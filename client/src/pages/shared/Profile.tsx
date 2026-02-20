@@ -27,12 +27,16 @@ const profileSchema = z.object({
       country: z.string().default(""),
     })
     .optional(),
+  roles: z
+    .array(z.enum(["adopter", "shelter_staff", "admin"]))
+    .min(1, "Please select at least one role")
+    .optional(),
 });
 
 export type ProfileForm = z.infer<typeof profileSchema>;
 
 export default function Profile() {
-  const { user } = useAppSelector((state) => state.auth);
+  const { user, activeRole } = useAppSelector((state) => state.auth);
   const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
@@ -65,6 +69,20 @@ export default function Profile() {
     },
   });
 
+  const leaveMutation = useMutation({
+    mutationFn: (shelterId: string) => api.delete(`/shelters/leave/${shelterId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["shelter-requests"] });
+      api.get("/auth/me").then((res) => {
+        dispatch(setUser(res.data.data.user));
+      });
+      toast.success("You left the shelter successfully");
+    },
+    onError: (error: AxiosError<{ message: string }>) => {
+      toast.error(error.response?.data?.message || "Failed to leave shelter");
+    },
+  });
+
   const {
     register,
     handleSubmit,
@@ -83,10 +101,14 @@ export default function Profile() {
         zipCode: user?.address?.zipCode || "",
         country: user?.address?.country || "",
       },
+      roles: (user?.roles as ("adopter" | "shelter_staff" | "admin")[]) || [
+        "adopter",
+      ],
     },
   });
 
   if (!user) return null;
+  const effectiveRole = activeRole || user.role;
 
   const onSubmit = async (data: ProfileForm) => {
     setIsLoading(true);
@@ -122,6 +144,23 @@ export default function Profile() {
     });
   };
 
+  const isCurrentShelterMember = (shelterId: string) => {
+    const inMemberships = (user.memberships || []).some((m) => {
+      if (!m.shelterId) return false;
+      const id =
+        typeof m.shelterId === "string" ? m.shelterId : m.shelterId._id;
+      return id === shelterId;
+    });
+
+    const primaryShelterId = user.shelterId
+      ? typeof user.shelterId === "string"
+        ? user.shelterId
+        : user.shelterId._id
+      : null;
+
+    return inMemberships || primaryShelterId === shelterId;
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <ProfileHeader
@@ -134,17 +173,20 @@ export default function Profile() {
 
       <PersonalInfoForm
         user={user}
+        activeRole={effectiveRole}
         isEditing={isEditing}
         register={register}
         errors={errors}
         onSubmit={handleSubmit(onSubmit)}
       />
 
-      {user.role === "shelter_staff" && (
+      {effectiveRole === "shelter_staff" && (
         <ShelterApplicationsList
           shelters={shelters}
           getApplicationStatus={getApplicationStatus}
           applyMutation={applyMutation}
+          leaveMutation={leaveMutation}
+          isCurrentShelterMember={isCurrentShelterMember}
         />
       )}
     </div>

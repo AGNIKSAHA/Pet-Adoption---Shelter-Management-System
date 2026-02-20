@@ -7,6 +7,27 @@ const router = Router();
 router.use(authenticate);
 
 router.get("/conversations", messageController.getConversations);
+router.post("/conversations/start", messageController.startConversation);
+router.get(
+  "/conversations/:conversationId/messages",
+  messageController.getConversationMessages,
+);
+router.post(
+  "/conversations/:conversationId/messages",
+  messageController.sendConversationMessage,
+);
+router.patch(
+  "/conversations/:conversationId/read",
+  messageController.markConversationAsRead,
+);
+router.patch(
+  "/conversations/:conversationId/handoff",
+  messageController.handoffConversation,
+);
+router.get(
+  "/conversations/:conversationId/staff-options",
+  messageController.getConversationStaffOptions,
+);
 router.get("/chatable-users", messageController.getChatableUsers);
 router.get("/:userId", messageController.getMessagesBetweenUsers);
 router.post("/", messageController.sendMessage);

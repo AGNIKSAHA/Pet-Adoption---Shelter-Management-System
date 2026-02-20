@@ -16,14 +16,21 @@ interface Message {
   content: string;
   isRead: boolean;
   createdAt: string;
+  senderStaffId?: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
 }
 
 import { User } from "../../../../types";
 
 interface ChatWindowProps {
-  selectedUserId: string | null;
+  selectedConversationId: string | null;
   selectedUser:
     | {
+        _id: string;
         firstName: string;
         lastName: string;
         role: string;
@@ -36,10 +43,21 @@ interface ChatWindowProps {
   handleSendMessage: (e: React.FormEvent) => void;
   isSending: boolean;
   currentUser: User | null;
+  staffOptions:
+    | {
+        _id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+        role: string;
+      }[]
+    | undefined;
+  onHandoff: (toStaffId: string) => void;
+  handoffPending: boolean;
 }
 
 export default function ChatWindow({
-  selectedUserId,
+  selectedConversationId,
   selectedUser,
   messages,
   loadingMessages,
@@ -48,6 +66,9 @@ export default function ChatWindow({
   handleSendMessage,
   isSending,
   currentUser,
+  staffOptions,
+  onHandoff,
+  handoffPending,
 }: ChatWindowProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -55,7 +76,7 @@ export default function ChatWindow({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  if (!selectedUserId) {
+  if (!selectedConversationId) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-gray-400 bg-gray-50/20">
         <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center">
@@ -64,8 +85,7 @@ export default function ChatWindow({
           </div>
           <h3 className="text-gray-900 font-bold text-lg">Your Inbox</h3>
           <p className="max-w-[240px] text-center text-sm mt-2">
-            Select a conversation from the left or search for a user to start
-            chatting.
+            Select a conversation from the left to start chatting.
           </p>
         </div>
       </div>
@@ -90,6 +110,25 @@ export default function ChatWindow({
             </p>
           </div>
         </div>
+        {currentUser?.role === "shelter_staff" && (
+          <select
+            className="text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white"
+            value=""
+            onChange={(e) => {
+              if (e.target.value) onHandoff(e.target.value);
+            }}
+            disabled={handoffPending}
+          >
+            <option value="">Transfer Conversation</option>
+            {staffOptions
+              ?.filter((staff) => staff._id !== currentUser._id && staff._id !== currentUser.id)
+              .map((staff) => (
+                <option key={staff._id} value={staff._id}>
+                  {staff.firstName} {staff.lastName}
+                </option>
+              ))}
+          </select>
+        )}
       </div>
 
       {/* Messages List */}
@@ -122,6 +161,13 @@ export default function ChatWindow({
                   >
                     {msg.content}
                   </div>
+                  {!isMine && (
+                    <div className="text-[10px] text-gray-500 pl-1">
+                      {msg.senderStaffId
+                        ? `Replied by: ${msg.senderStaffId.firstName} ${msg.senderStaffId.lastName}`
+                        : `Sent by: ${msg.senderId.firstName} ${msg.senderId.lastName}`}
+                    </div>
+                  )}
                   <div
                     className={`flex items-center gap-1 text-[10px] text-gray-400 ${isMine ? "justify-end" : "justify-start"}`}
                   >

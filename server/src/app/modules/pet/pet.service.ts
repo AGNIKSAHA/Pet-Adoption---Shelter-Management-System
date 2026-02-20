@@ -4,6 +4,12 @@ import { Shelter } from "../shelter/shelter.model";
 import { AppError } from "../../common/middlewares/error.middleware";
 import { AuditLog } from "../audit/audit.model";
 import { User } from "../user/user.model";
+import { PetVetApproval } from "./pet-vet-approval.model";
+import { PetTransferRequest } from "./pet-transfer.model";
+import { sendEmail } from "../../common/utils/mail";
+import { env } from "../../common/config/env";
+import { Application } from "../application/application.model";
+import { FosterAssignment } from "../foster/foster-assignment.model";
 
 export const createPetInDB = async (
   data: Omit<Partial<IPet>, "shelterId"> & {
@@ -146,10 +152,11 @@ export const getPetStatsFromDB = async (
   userShelterId?: string,
   queryShelterId?: string,
 ) => {
-  const shelterId = userRole === "admin" ? queryShelterId : userShelterId;
+  const shelterId =
+    userRole === "admin" ? queryShelterId : queryShelterId || userShelterId;
 
   const query: FilterQuery<IPet> & { isActive?: boolean } = { isActive: true };
-  if (shelterId) query.shelterId = shelterId;
+  if (shelterId) query.shelterId = new mongoose.Types.ObjectId(shelterId);
 
   const stats = await Pet.aggregate([
     { $match: query },
@@ -290,6 +297,13 @@ export const updatePetStatusInDB = async (
     );
   }
 
+  if (pet.status === "medical_hold" && status === "available") {
+    throw new AppError(
+      400,
+      "Vet sign-off required. Submit vet approval request to release from medical hold.",
+    );
+  }
+
   const oldStatus = pet.status;
   pet.status = status as PetStatus;
 
@@ -310,6 +324,373 @@ export const updatePetStatusInDB = async (
   });
 
   return pet;
+};
+
+export const requestVetMedicalReleaseInDB = async (
+  petId: string,
+  vetEmail: string,
+  requestNote: string | undefined,
+  userId: string,
+  userRole: string,
+  ip?: string,
+  userAgent?: string,
+) => {
+  const pet = await Pet.findById(petId).populate("shelterId", "name");
+  if (!pet) {
+    throw new AppError(404, "Pet not found");
+  }
+
+  if (pet.status !== "medical_hold") {
+    throw new AppError(
+      400,
+      "Vet sign-off is only required when pet is in medical hold",
+    );
+  }
+
+  if (userRole === "shelter_staff") {
+    const { StaffApplication } =
+      await import("../shelter/staff-application.model");
+    const application = await StaffApplication.findOne({
+      userId,
+      shelterId: pet.shelterId,
+      status: "approved",
+    });
+
+    if (!application) {
+      throw new AppError(
+        403,
+        "You must be an approved staff member for this shelter to request vet sign-off",
+      );
+    }
+  }
+
+  const existingPending = await PetVetApproval.findOne({
+    petId,
+    status: "pending",
+  });
+  if (existingPending) {
+    throw new AppError(
+      400,
+      "A pending vet sign-off request already exists for this pet",
+    );
+  }
+
+  const vetApproval = await PetVetApproval.create({
+    petId: pet._id,
+    shelterId: pet.shelterId,
+    requestedBy: userId,
+    vetEmail,
+    requestNote,
+    status: "pending",
+  });
+
+  const serverBaseUrl =
+    process.env.SERVER_PUBLIC_URL || `http://localhost:${env.PORT}`;
+  const approveUrl = `${serverBaseUrl}/api/v1/pets/vet-approvals/${vetApproval.token}/approve`;
+  const rejectUrl = `${serverBaseUrl}/api/v1/pets/vet-approvals/${vetApproval.token}/reject`;
+
+  const shelterName =
+    typeof pet.shelterId === "object" && "name" in pet.shelterId
+      ? (pet.shelterId as { name?: string }).name || "Shelter"
+      : "Shelter";
+
+  await sendEmail({
+    to: vetEmail,
+    subject: `Vet Sign-off Required: ${pet.name} (${pet.species})`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 680px; margin: 0 auto; line-height: 1.5;">
+        <h2>Medical Hold Release Request</h2>
+        <p>A shelter staff member has requested your sign-off to release this pet from <strong>medical hold</strong> to <strong>available</strong>.</p>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin:16px 0;">
+          <p><strong>Pet Name:</strong> ${pet.name}</p>
+          <p><strong>Species/Breed:</strong> ${pet.species} / ${pet.breed}</p>
+          <p><strong>Age:</strong> ${pet.age} months</p>
+          <p><strong>Gender:</strong> ${pet.gender}</p>
+          <p><strong>Current Status:</strong> ${pet.status}</p>
+          <p><strong>Shelter:</strong> ${shelterName}</p>
+          <p><strong>Description:</strong> ${pet.description}</p>
+          ${requestNote ? `<p><strong>Staff Note:</strong> ${requestNote}</p>` : ""}
+        </div>
+        <p>Please choose an action:</p>
+        <div style="margin:20px 0;">
+          <a href="${approveUrl}" style="display:inline-block;padding:10px 18px;background:#16a34a;color:#fff;text-decoration:none;border-radius:6px;margin-right:12px;">Accept</a>
+          <a href="${rejectUrl}" style="display:inline-block;padding:10px 18px;background:#dc2626;color:#fff;text-decoration:none;border-radius:6px;">Reject</a>
+        </div>
+        <p style="font-size:12px;color:#64748b;">If buttons do not work, open these links manually:<br/>Approve: ${approveUrl}<br/>Reject: ${rejectUrl}</p>
+      </div>
+    `,
+  });
+
+  await AuditLog.create({
+    userId,
+    action: "request_vet_signoff",
+    resource: "pet",
+    resourceId: pet._id,
+    changes: { from: "medical_hold", requestedTo: "available", vetEmail },
+    ipAddress: ip,
+    userAgent,
+  });
+
+  return vetApproval;
+};
+
+export const processVetMedicalReleaseInDB = async (
+  token: string,
+  decision: "approve" | "reject",
+) => {
+  // Standalone-safe flow (no Mongo transaction required)
+  const nextStatus = decision === "approve" ? "approved" : "rejected";
+  const approval = await PetVetApproval.findOneAndUpdate(
+    { token, status: "pending" },
+    { $set: { status: nextStatus, decidedAt: new Date() } },
+    { new: true },
+  );
+
+  if (!approval) {
+    const existing = await PetVetApproval.findOne({ token });
+    if (!existing) {
+      throw new AppError(404, "Vet approval request not found");
+    }
+    throw new AppError(400, `This request is already ${existing.status}.`);
+  }
+
+  const pet = await Pet.findById(approval.petId);
+  if (!pet) {
+    throw new AppError(404, "Pet not found");
+  }
+
+  if (decision === "approve") {
+    pet.status = "available";
+    await pet.save();
+  }
+
+  return { status: approval.status, petName: pet.name };
+};
+
+const getApprovedStaffShelterIds = async (userId: string) => {
+  const { StaffApplication } = await import("../shelter/staff-application.model");
+  const apps = await StaffApplication.find({ userId, status: "approved" }).select(
+    "shelterId",
+  );
+  return apps.map((app) => app.shelterId.toString());
+};
+
+export const createPetTransferRequestInDB = async (
+  petId: string,
+  toShelterId: string,
+  note: string | undefined,
+  userId: string,
+  ip?: string,
+  userAgent?: string,
+) => {
+  const pet = await Pet.findById(petId);
+  if (!pet) {
+    throw new AppError(404, "Pet not found");
+  }
+
+  const fromShelterId = pet.shelterId.toString();
+  if (fromShelterId === toShelterId) {
+    throw new AppError(400, "Source and target shelter cannot be the same");
+  }
+
+  const staffShelterIds = await getApprovedStaffShelterIds(userId);
+  if (!staffShelterIds.includes(fromShelterId)) {
+    throw new AppError(403, "You can only transfer pets from your shelter");
+  }
+
+  const targetShelter = await Shelter.findOne({ _id: toShelterId, isActive: true });
+  if (!targetShelter) {
+    throw new AppError(404, "Target shelter not found or inactive");
+  }
+
+  const existingPending = await PetTransferRequest.findOne({
+    petId,
+    status: "pending",
+  });
+  if (existingPending) {
+    throw new AppError(400, "A pending transfer request already exists");
+  }
+
+  const request = await PetTransferRequest.create({
+    petId,
+    fromShelterId,
+    toShelterId,
+    requestedBy: userId,
+    note,
+    status: "pending",
+  });
+
+  await AuditLog.create({
+    userId,
+    action: "create_pet_transfer_request",
+    resource: "pet_transfer",
+    resourceId: request._id,
+    changes: { petId, fromShelterId, toShelterId, note },
+    ipAddress: ip,
+    userAgent,
+  });
+
+  return request;
+};
+
+export const getPetTransferRequestsForStaffInDB = async (userId: string) => {
+  const staffShelterIds = await getApprovedStaffShelterIds(userId);
+
+  const [incoming, outgoing] = await Promise.all([
+    PetTransferRequest.find({
+      toShelterId: { $in: staffShelterIds },
+    })
+      .populate("petId", "name species breed status photos")
+      .populate("fromShelterId", "name")
+      .populate("toShelterId", "name")
+      .populate("requestedBy", "firstName lastName email")
+      .populate("decidedBy", "firstName lastName email")
+      .sort({ createdAt: -1 }),
+    PetTransferRequest.find({
+      requestedBy: userId,
+    })
+      .populate("petId", "name species breed status photos")
+      .populate("fromShelterId", "name")
+      .populate("toShelterId", "name")
+      .populate("requestedBy", "firstName lastName email")
+      .populate("decidedBy", "firstName lastName email")
+      .sort({ createdAt: -1 }),
+  ]);
+
+  return { incoming, outgoing };
+};
+
+export const respondPetTransferRequestInDB = async (
+  requestId: string,
+  decision: "approved" | "rejected",
+  decisionNote: string | undefined,
+  userId: string,
+  ip?: string,
+  userAgent?: string,
+) => {
+  const request = await PetTransferRequest.findById(requestId);
+  if (!request) {
+    throw new AppError(404, "Transfer request not found");
+  }
+
+  if (request.status !== "pending") {
+    throw new AppError(400, `Transfer request already ${request.status}`);
+  }
+
+  const staffShelterIds = await getApprovedStaffShelterIds(userId);
+  if (!staffShelterIds.includes(request.toShelterId.toString())) {
+    throw new AppError(403, "Only target shelter staff can process this request");
+  }
+
+  if (decision === "rejected") {
+    request.status = "rejected";
+    request.decidedBy = new mongoose.Types.ObjectId(userId);
+    request.decisionNote = decisionNote;
+    await request.save();
+
+    await AuditLog.create({
+      userId,
+      action: "reject_pet_transfer_request",
+      resource: "pet_transfer",
+      resourceId: request._id,
+      changes: { decisionNote },
+      ipAddress: ip,
+      userAgent,
+    });
+
+    return request;
+  }
+
+  const pet = await Pet.findById(request.petId);
+  if (!pet) {
+    throw new AppError(404, "Pet not found");
+  }
+
+  if (pet.shelterId.toString() !== request.fromShelterId.toString()) {
+    throw new AppError(400, "Pet is no longer in source shelter");
+  }
+
+  const sourceShelter = await Shelter.findById(request.fromShelterId);
+  const targetShelter = await Shelter.findById(request.toShelterId);
+  if (!sourceShelter || !targetShelter) {
+    throw new AppError(404, "Source or target shelter not found");
+  }
+
+  // Sequential transfer with compensation for standalone Mongo environments.
+  const previousPetShelterId = pet.shelterId;
+  const previousSourceOcc = sourceShelter.currentOccupancy;
+  const previousTargetOcc = targetShelter.currentOccupancy;
+  let applicationsMoved = false;
+  let assignmentsMoved = false;
+
+  try {
+    pet.shelterId = request.toShelterId;
+    await pet.save();
+
+    await Application.updateMany(
+      { petId: request.petId },
+      { $set: { shelterId: request.toShelterId } },
+    );
+    applicationsMoved = true;
+
+    await FosterAssignment.updateMany(
+      { petId: request.petId },
+      { $set: { shelterId: request.toShelterId } },
+    );
+    assignmentsMoved = true;
+
+    sourceShelter.currentOccupancy = Math.max(0, sourceShelter.currentOccupancy - 1);
+    targetShelter.currentOccupancy += 1;
+    await sourceShelter.save();
+    await targetShelter.save();
+
+    request.status = "approved";
+    request.decidedBy = new mongoose.Types.ObjectId(userId);
+    request.decisionNote = decisionNote;
+    await request.save();
+  } catch (error) {
+    // Compensation rollback
+    pet.shelterId = previousPetShelterId;
+    await pet.save().catch(() => null);
+
+    if (applicationsMoved) {
+      await Application.updateMany(
+        { petId: request.petId },
+        { $set: { shelterId: request.fromShelterId } },
+      ).catch(() => null);
+    }
+
+    if (assignmentsMoved) {
+      await FosterAssignment.updateMany(
+        { petId: request.petId },
+        { $set: { shelterId: request.fromShelterId } },
+      ).catch(() => null);
+    }
+
+    sourceShelter.currentOccupancy = previousSourceOcc;
+    targetShelter.currentOccupancy = previousTargetOcc;
+    await sourceShelter.save().catch(() => null);
+    await targetShelter.save().catch(() => null);
+
+    throw error;
+  }
+
+  await AuditLog.create({
+    userId,
+    action: "approve_pet_transfer_request",
+    resource: "pet_transfer",
+    resourceId: request._id,
+    changes: {
+      petId: request.petId,
+      fromShelterId: request.fromShelterId,
+      toShelterId: request.toShelterId,
+      decisionNote,
+    },
+    ipAddress: ip,
+    userAgent,
+  });
+
+  return request;
 };
 
 export const deletePetInDB = async (

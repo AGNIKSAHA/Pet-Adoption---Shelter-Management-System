@@ -5,6 +5,7 @@ import { ProfileForm } from "../../Profile";
 
 interface PersonalInfoFormProps {
   user: User;
+  activeRole: string;
   isEditing: boolean;
   register: UseFormRegister<ProfileForm>;
   errors: FieldErrors<ProfileForm>;
@@ -13,6 +14,7 @@ interface PersonalInfoFormProps {
 
 export default function PersonalInfoForm({
   user,
+  activeRole,
   isEditing,
   register,
   errors,
@@ -25,7 +27,7 @@ export default function PersonalInfoForm({
           Personal Information
         </h2>
         <span className="px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-800 capitalize">
-          {user.role.replace("_", " ")}
+          {activeRole.replace("_", " ")}
         </span>
       </div>
 
@@ -101,127 +103,197 @@ export default function PersonalInfoForm({
               </div>
             </div>
 
+            {activeRole !== "admin" && (
+              <div
+                className={`flex items-center space-x-3 p-4 ${isEditing ? "bg-white border ring-1 ring-gray-200" : "bg-gray-50"} rounded-lg transition-all`}
+              >
+                <Phone className="w-5 h-5 text-gray-400" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-500">
+                    Phone Number
+                  </p>
+                  {isEditing ? (
+                    <input
+                      {...register("phone")}
+                      placeholder="Enter phone number"
+                      className="w-full mt-1 px-0 py-0 border-none focus:ring-0 text-gray-900"
+                    />
+                  ) : (
+                    <p className="text-gray-900">
+                      {user.phone || "Not provided"}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div
-              className={`flex items-center space-x-3 p-4 ${isEditing ? "bg-white border ring-1 ring-gray-200" : "bg-gray-50"} rounded-lg transition-all`}
+              className={`p-4 ${isEditing ? "bg-white border ring-1 ring-gray-200" : "bg-gray-50"} rounded-lg`}
             >
-              <Phone className="w-5 h-5 text-gray-400" />
-              <div className="flex-1">
+              <div className="flex items-center space-x-3 mb-2">
+                <Shield className="w-5 h-5 text-gray-400" />
                 <p className="text-sm font-medium text-gray-500">
-                  Phone Number
-                </p>
-                {isEditing ? (
-                  <input
-                    {...register("phone")}
-                    placeholder="Enter phone number"
-                    className="w-full mt-1 px-0 py-0 border-none focus:ring-0 text-gray-900"
-                  />
-                ) : (
-                  <p className="text-gray-900">
-                    {user.phone || "Not provided"}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg">
-              <Shield className="w-5 h-5 text-gray-400" />
-              <div>
-                <p className="text-sm font-medium text-gray-500">
-                  Account Role
-                </p>
-                <p className="text-gray-900 capitalize">
-                  {user.role.replace("_", " ")}
+                  Account Roles
                 </p>
               </div>
-            </div>
-          </div>
-
-          <div
-            className={`p-4 ${isEditing ? "bg-white border ring-1 ring-gray-200" : "bg-gray-50"} rounded-lg space-y-4`}
-          >
-            <div className="flex items-center space-x-3">
-              <MapPin className="w-5 h-5 text-gray-400" />
-              <p className="text-sm font-medium text-gray-500">
-                Address Information
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-8">
-              <div className="space-y-1">
-                <label className="text-xs text-gray-400 uppercase tracking-wider font-bold">
-                  Street
-                </label>
+              <div className="ml-8">
                 {isEditing ? (
-                  <input
-                    {...register("address.street")}
-                    className="w-full text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
-                  />
-                ) : (
-                  <p className="text-sm text-gray-900">
-                    {user.address?.street || "No street information"}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs text-gray-400 uppercase tracking-wider font-bold">
-                  City
-                </label>
-                {isEditing ? (
-                  <input
-                    {...register("address.city")}
-                    className="w-full text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
-                  />
-                ) : (
-                  <p className="text-sm text-gray-900">
-                    {user.address?.city || "No city information"}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs text-gray-400 uppercase tracking-wider font-bold">
-                  State / Zip
-                </label>
-                {isEditing ? (
-                  <div className="flex gap-2">
-                    <input
-                      {...register("address.state")}
-                      placeholder="State"
-                      className="w-1/2 text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
-                    />
-                    <input
-                      {...register("address.zipCode")}
-                      placeholder="Zip"
-                      className="w-1/2 text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
-                    />
+                  <div className="space-y-2 mt-2">
+                    <div className="flex items-center">
+                      <input
+                        id="role-adopter-edit"
+                        type="checkbox"
+                        value="adopter"
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                        {...register("roles")}
+                      />
+                      <label
+                        htmlFor="role-adopter-edit"
+                        className="ml-2 block text-sm text-gray-900"
+                      >
+                        Pet Adopter
+                      </label>
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        id="role-staff-edit"
+                        type="checkbox"
+                        value="shelter_staff"
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                        {...register("roles")}
+                      />
+                      <label
+                        htmlFor="role-staff-edit"
+                        className="ml-2 block text-sm text-gray-900"
+                      >
+                        Shelter Staff
+                      </label>
+                    </div>
+                    {user.role === "admin" && (
+                      <div className="flex items-center">
+                        <input
+                          id="role-admin-edit"
+                          type="checkbox"
+                          value="admin"
+                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                          {...register("roles")}
+                        />
+                        <label
+                          htmlFor="role-admin-edit"
+                          className="ml-2 block text-sm text-gray-900"
+                        >
+                          Admin
+                        </label>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-900">
-                    {user.address?.state
-                      ? `${user.address.state}, ${user.address.zipCode}`
-                      : "No state/zip information"}
+                  <p className="text-gray-900 capitalize">
+                    {(user.roles && user.roles.length > 0
+                      ? user.roles
+                      : [user.role]
+                    )
+                      .map((r) => r.replace("_", " "))
+                      .join(", ")}
                   </p>
                 )}
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs text-gray-400 uppercase tracking-wider font-bold">
-                  Country
-                </label>
-                {isEditing ? (
-                  <input
-                    {...register("address.country")}
-                    className="w-full text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
-                  />
-                ) : (
-                  <p className="text-sm text-gray-900">
-                    {user.address?.country || "No country information"}
+                {errors.roles && (
+                  <p className="text-xs text-red-500 mt-1">
+                    {errors.roles.message as string}
                   </p>
                 )}
               </div>
             </div>
           </div>
+
+          {activeRole === "adopter" && (
+            <div
+              className={`p-4 ${isEditing ? "bg-white border ring-1 ring-gray-200" : "bg-gray-50"} rounded-lg space-y-4`}
+            >
+              <div className="flex items-center space-x-3">
+                <MapPin className="w-5 h-5 text-gray-400" />
+                <p className="text-sm font-medium text-gray-500">
+                  Address Information
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-8">
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-400 uppercase tracking-wider font-bold">
+                    Street
+                  </label>
+                  {isEditing ? (
+                    <input
+                      {...register("address.street")}
+                      className="w-full text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
+                    />
+                  ) : (
+                    <p className="text-sm text-gray-900">
+                      {user.address?.street || "No street information"}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-400 uppercase tracking-wider font-bold">
+                    City
+                  </label>
+                  {isEditing ? (
+                    <input
+                      {...register("address.city")}
+                      className="w-full text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
+                    />
+                  ) : (
+                    <p className="text-sm text-gray-900">
+                      {user.address?.city || "No city information"}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-400 uppercase tracking-wider font-bold">
+                    State / Zip
+                  </label>
+                  {isEditing ? (
+                    <div className="flex gap-2">
+                      <input
+                        {...register("address.state")}
+                        placeholder="State"
+                        className="w-1/2 text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
+                      />
+                      <input
+                        {...register("address.zipCode")}
+                        placeholder="Zip"
+                        className="w-1/2 text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-900">
+                      {user.address?.state
+                        ? `${user.address.state}, ${user.address.zipCode}`
+                        : "No state/zip information"}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-400 uppercase tracking-wider font-bold">
+                    Country
+                  </label>
+                  {isEditing ? (
+                    <input
+                      {...register("address.country")}
+                      className="w-full text-sm border-b border-gray-200 focus:border-primary-500 outline-none pb-1"
+                    />
+                  ) : (
+                    <p className="text-sm text-gray-900">
+                      {user.address?.country || "No country information"}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </form>
       </div>
     </div>

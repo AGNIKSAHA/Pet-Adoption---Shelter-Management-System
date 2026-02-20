@@ -1,11 +1,17 @@
 import jwt from "jsonwebtoken";
 import { env } from "../config/env";
 
+export interface UserMembership {
+  shelterId: string;
+  role: "admin" | "shelter_staff" | "adopter";
+}
+
 export interface TokenPayload {
   id: string;
   email: string;
   role: "admin" | "shelter_staff" | "adopter";
-  shelterId?: string;
+  roles?: string[];
+  memberships: UserMembership[];
 }
 
 interface VerificationTokenPayload {

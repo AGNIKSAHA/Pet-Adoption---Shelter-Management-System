@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
@@ -20,56 +20,72 @@ import { useAppSelector } from "../../store/store";
 
 import { Pet } from "../../types";
 import { AxiosError } from "axios";
+import {
+  getOfflinePetQueueCount,
+  onOfflinePetQueueUpdated,
+  syncOfflinePetQueue,
+} from "../../lib/offlinePetQueue";
 
 export default function PetManagement() {
   const queryClient = useQueryClient();
-  const { user } = useAppSelector((state) => state.auth);
+  const { user, activeShelterId } = useAppSelector((state) => state.auth);
+  const MONGO_OBJECT_ID_REGEX = /^[a-f0-9]{24}$/i;
 
   const extractId = (
     val: string | { _id?: string; id?: string } | null | undefined,
   ): string | undefined => {
     if (!val || val === "null") return undefined;
-    if (typeof val === "string") return val;
-    return val._id || val.id;
-  };
-
-  const getEffectiveShelterId = () => {
-    const sid = extractId(user?.shelterId);
-    if (sid) return sid;
-
-    // Fallback to first approved application
-    const approvedApp = user?.staffApplications?.find(
-      (app) => app.status === "approved",
-    );
-
-    return extractId(approvedApp?.shelterId);
-  };
-
-  const effectiveShelterId = getEffectiveShelterId();
-  const [activeShelterId, setActiveShelterId] = useState<string | undefined>(
-    effectiveShelterId,
-  );
-
-  // Sync activeShelterId if effectiveShelterId changes and activeShelterId is not set
-  useEffect(() => {
-    if (!activeShelterId && effectiveShelterId) {
-      setActiveShelterId(effectiveShelterId);
+    if (typeof val === "string") {
+      const trimmed = val.trim();
+      if (MONGO_OBJECT_ID_REGEX.test(trimmed)) return trimmed;
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          return extractId(parsed as { _id?: string; id?: string });
+        } catch {
+          return undefined;
+        }
+      }
+      return undefined;
     }
-  }, [effectiveShelterId, activeShelterId]);
+    const maybeId = (val as any)._id || (val as any).id;
+    if (maybeId) return extractId(maybeId as any);
+
+    if (typeof (val as any).toString === "function") {
+      const asString = (val as any).toString();
+      if (typeof asString === "string" && MONGO_OBJECT_ID_REGEX.test(asString)) {
+        return asString;
+      }
+    }
+
+    return undefined;
+  };
 
   const allApproved =
-    user?.staffApplications
-      ?.filter((app) => app.status === "approved")
-      ?.map((app) => {
-        const shelterName =
-          typeof app.shelterId === "object"
-            ? app.shelterId.name
-            : "Primary Shelter";
-        return {
-          id: extractId(app.shelterId),
-          name: shelterName,
-        };
-      }) || [];
+    user?.memberships?.map((m) => {
+      const shelterName =
+        m.shelterId && typeof m.shelterId === "object"
+          ? (m.shelterId as any).name
+          : "Primary Shelter";
+      return {
+        id: extractId(m.shelterId),
+        name: shelterName,
+      };
+    }) || [];
+
+  (user?.staffApplications || [])
+    .filter((app) => app.status === "approved")
+    .forEach((app) => {
+      const sid = extractId(app.shelterId as any);
+      if (!sid) return;
+      const shelterName =
+        typeof app.shelterId === "object"
+          ? (app.shelterId as any).name || "Approved Shelter"
+          : "Approved Shelter";
+      if (!allApproved.find((s) => s.id === sid)) {
+        allApproved.push({ id: sid, name: shelterName });
+      }
+    });
 
   const userSid = extractId(user?.shelterId);
   if (userSid && !allApproved.find((s) => s.id === userSid)) {
@@ -84,29 +100,89 @@ export default function PetManagement() {
   }
 
   // Deduplicate and filter out undefined IDs
-  const approvedShelters = allApproved.filter(
+  const allShelters = allApproved.filter(
     (s, index, self) => s.id && self.findIndex((t) => t.id === s.id) === index,
   );
+  const normalizedActiveShelterId = extractId(activeShelterId as any);
+  const effectiveShelterId =
+    normalizedActiveShelterId || (allShelters[0]?.id as string | undefined);
+
+  const currentShelterName =
+    allShelters.find((s) => s.id === effectiveShelterId)?.name ||
+    "Shelter";
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
+  const [offlinePendingCount, setOfflinePendingCount] = useState(
+    getOfflinePetQueueCount(),
+  );
+  const [isSyncingOffline, setIsSyncingOffline] = useState(false);
+  const syncInProgressRef = useRef(false);
+
+  useEffect(() => {
+    setPage(1);
+  }, [effectiveShelterId]);
+
+  useEffect(() => {
+    const updateCount = () => setOfflinePendingCount(getOfflinePetQueueCount());
+
+    const syncNow = async () => {
+      if (!navigator.onLine || syncInProgressRef.current) return;
+      syncInProgressRef.current = true;
+      setIsSyncingOffline(true);
+      try {
+        const result = await syncOfflinePetQueue(api);
+        if (result.synced > 0) {
+          toast.success(
+            `Synced ${result.synced} offline pet change${result.synced > 1 ? "s" : ""}.`,
+          );
+          queryClient.invalidateQueries({ queryKey: ["shelter-pets"] });
+          queryClient.invalidateQueries({ queryKey: ["shelter-pet-stats"] });
+        }
+      } finally {
+        syncInProgressRef.current = false;
+        updateCount();
+        setIsSyncingOffline(false);
+      }
+    };
+
+    const unsubscribeQueue = onOfflinePetQueueUpdated(updateCount);
+    window.addEventListener("online", syncNow);
+
+    updateCount();
+    if (navigator.onLine) {
+      syncNow();
+    }
+
+    return () => {
+      unsubscribeQueue();
+      window.removeEventListener("online", syncNow);
+    };
+  }, [queryClient]);
 
   const { data: statsData } = useQuery({
-    queryKey: ["shelter-pet-stats", activeShelterId],
+    queryKey: ["shelter-pet-stats", effectiveShelterId],
     queryFn: async () => {
       const response = await api.get("/pets/stats", {
-        params: { shelterId: activeShelterId },
+        params: { shelterId: effectiveShelterId },
       });
       return response.data;
     },
-    enabled: !!activeShelterId || user?.role === "admin",
+    enabled: !!effectiveShelterId || user?.role === "admin",
   });
 
+
   const { data, isLoading } = useQuery({
-    queryKey: ["shelter-pets", page, search, statusFilter, activeShelterId],
+    queryKey: [
+      "shelter-pets",
+      page,
+      search,
+      statusFilter,
+      effectiveShelterId,
+    ],
     queryFn: async () => {
       const response = await api.get("/pets", {
         params: {
@@ -114,12 +190,12 @@ export default function PetManagement() {
           limit: 10,
           name: search || undefined,
           status: statusFilter !== "all" ? statusFilter : undefined,
-          shelterId: activeShelterId,
+          shelterId: effectiveShelterId,
         },
       });
       return response.data;
     },
-    enabled: !!activeShelterId || user?.role === "admin",
+    enabled: !!effectiveShelterId || user?.role === "admin",
   });
 
   const deleteMutation = useMutation({
@@ -141,7 +217,7 @@ export default function PetManagement() {
 
   const handleAdd = () => {
     // Allow if they have an active ID OR if they are an admin
-    if (!activeShelterId && user?.role !== "admin") {
+    if (!effectiveShelterId && user?.role !== "admin") {
       toast.error("Please select a shelter first.");
       return;
     }
@@ -171,7 +247,7 @@ export default function PetManagement() {
   const stats = statsData?.data || { total: 0 };
 
   // Show message if no shelter is selected
-  if (!activeShelterId && user?.role !== "admin") {
+  if (!effectiveShelterId && user?.role !== "admin") {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
         <PawPrint className="w-16 h-16 text-gray-300" />
@@ -192,26 +268,9 @@ export default function PetManagement() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-bold text-gray-900">Pet Management</h1>
-          {approvedShelters.length > 1 ? (
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-500">
-                Managing:
-              </span>
-              <select
-                value={activeShelterId}
-                onChange={(e) => setActiveShelterId(e.target.value)}
-                className="text-sm font-semibold text-primary-600 bg-primary-50 border-none rounded-lg focus:ring-0 cursor-pointer py-1"
-              >
-                {approvedShelters.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : approvedShelters.length === 1 ? (
+          {effectiveShelterId ? (
             <p className="text-sm font-semibold text-primary-600">
-              Managing: {approvedShelters[0].name}
+              Managing: {currentShelterName}
             </p>
           ) : (
             <p className="text-gray-500">
@@ -275,6 +334,20 @@ export default function PetManagement() {
           </div>
         </div>
       </div>
+
+
+      {(offlinePendingCount > 0 || isSyncingOffline) && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <p className="text-sm font-medium text-amber-800">
+            {isSyncingOffline
+              ? "Syncing offline pet changes..."
+              : `${offlinePendingCount} offline pet change${offlinePendingCount > 1 ? "s" : ""} pending sync.`}
+          </p>
+          <p className="text-xs text-amber-700">
+            Changes are stored locally and will auto-merge when internet is available.
+          </p>
+        </div>
+      )}
 
       {/* Filters & Search */}
       <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col md:flex-row gap-4">
@@ -494,7 +567,7 @@ export default function PetManagement() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         pet={selectedPet}
-        shelterId={activeShelterId}
+        shelterId={effectiveShelterId || undefined}
       />
     </div>
   );

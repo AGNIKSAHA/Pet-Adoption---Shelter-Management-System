@@ -52,7 +52,7 @@ export const getAllShelters = catchAsync(
 );
 
 export const createShelter = catchAsync(async (req: Request, res: Response) => {
-  const shelter = await adminService.createShelterInDB(req.body);
+  const shelter = await adminService.createShelterInDB(req.body, req.user!.id);
   res.status(201).json({
     success: true,
     message: "Shelter created successfully",
@@ -62,7 +62,7 @@ export const createShelter = catchAsync(async (req: Request, res: Response) => {
 
 export const updateShelter = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const shelter = await adminService.updateShelterInDB(id, req.body);
+  const shelter = await adminService.updateShelterInDB(id, req.body, req.user!.id);
 
   res.json({
     success: true,
@@ -73,7 +73,7 @@ export const updateShelter = catchAsync(async (req: Request, res: Response) => {
 
 export const deleteShelter = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
-  await adminService.deleteShelterFromDB(id);
+  await adminService.deleteShelterFromDB(id, req.user!.id);
 
   res.json({
     success: true,
@@ -83,8 +83,10 @@ export const deleteShelter = catchAsync(async (req: Request, res: Response) => {
 
 // Shelter Staff Approval
 export const getPendingShelterRequests = catchAsync(
-  async (_req: Request, res: Response) => {
-    const requests = await adminService.getPendingShelterRequestsFromDB();
+  async (req: Request, res: Response) => {
+    const requests = await adminService.getPendingShelterRequestsFromDB(
+      req.user!.id,
+    );
     res.json({
       success: true,
       data: requests,
@@ -95,7 +97,7 @@ export const getPendingShelterRequests = catchAsync(
 export const approveShelterRequest = catchAsync(
   async (req: Request, res: Response) => {
     const { id } = req.params;
-    const user = await adminService.approveShelterRequestInDB(id);
+    const user = await adminService.approveShelterRequestInDB(id, req.user!.id);
 
     res.json({
       success: true,
@@ -108,7 +110,7 @@ export const approveShelterRequest = catchAsync(
 export const rejectShelterRequest = catchAsync(
   async (req: Request, res: Response) => {
     const { id } = req.params;
-    const user = await adminService.rejectShelterRequestInDB(id);
+    const user = await adminService.rejectShelterRequestInDB(id, req.user!.id);
 
     res.json({
       success: true,

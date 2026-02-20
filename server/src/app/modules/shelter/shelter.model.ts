@@ -17,9 +17,11 @@ export interface IShelter extends Document {
     coordinates: [number, number]; // [longitude, latitude]
   };
   website?: string;
+  timezone?: string;
   capacity: number;
   currentOccupancy: number;
   isActive: boolean;
+  createdBy?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -65,6 +67,11 @@ const shelterSchema = new Schema<IShelter>(
       },
     },
     website: String,
+    timezone: {
+      type: String,
+      default: "UTC",
+      trim: true,
+    },
     capacity: {
       type: Number,
       required: [true, "Capacity is required"],
@@ -79,6 +86,10 @@ const shelterSchema = new Schema<IShelter>(
       type: Boolean,
       default: true,
     },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
   {
     timestamps: true,
@@ -88,6 +99,7 @@ const shelterSchema = new Schema<IShelter>(
 // Geospatial index for location-based queries
 shelterSchema.index({ location: "2dsphere" });
 shelterSchema.index({ isActive: 1 });
+shelterSchema.index({ createdBy: 1 });
 
 export const Shelter =
   (mongoose.models.Shelter as mongoose.Model<IShelter>) ||

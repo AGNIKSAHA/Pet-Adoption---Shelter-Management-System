@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Eye,
@@ -16,9 +16,19 @@ import { AxiosError } from "axios";
 import { useAppSelector } from "../../store/store";
 import { PawPrint } from "lucide-react";
 
+type ApplicationConflictDetails = {
+  code: "APPLICATION_VERSION_CONFLICT";
+  currentApplication?: AdoptionApplication;
+};
+
+type ApiErrorResponse = {
+  message: string;
+  details?: ApplicationConflictDetails;
+};
+
 export default function ApplicationsQueue() {
   const queryClient = useQueryClient();
-  const { user } = useAppSelector((state) => state.auth);
+  const { user, activeShelterId } = useAppSelector((state) => state.auth);
 
   const extractId = (
     val: string | { _id?: string; id?: string } | null | undefined,
@@ -28,59 +38,21 @@ export default function ApplicationsQueue() {
     return val._id || val.id;
   };
 
-  const getEffectiveShelterId = () => {
-    const sid = extractId(user?.shelterId);
-    if (sid) return sid;
-
-    const approvedApp = user?.staffApplications?.find(
-      (app) => app.status === "approved",
-    );
-
-    return extractId(approvedApp?.shelterId);
-  };
-
-  const effectiveShelterId = getEffectiveShelterId();
-  const [activeShelterId, setActiveShelterId] = useState<string | undefined>(
-    effectiveShelterId,
-  );
-
-  // Sync activeShelterId if effectiveShelterId changes and activeShelterId is not set
-  useEffect(() => {
-    if (!activeShelterId && effectiveShelterId) {
-      setActiveShelterId(effectiveShelterId);
-    }
-  }, [effectiveShelterId, activeShelterId]);
-
   const allApproved =
-    user?.staffApplications
-      ?.filter((app) => app.status === "approved")
-      ?.map((app) => {
-        const shelterName =
-          typeof app.shelterId === "object"
-            ? app.shelterId.name
-            : "Primary Shelter";
-        return {
-          id: extractId(app.shelterId),
-          name: shelterName,
-        };
-      }) || [];
+    user?.memberships?.map((m) => {
+      const shelterName =
+        typeof m.shelterId === "object" ? m.shelterId.name : "Primary Shelter";
+      return {
+        id: extractId(m.shelterId),
+        name: shelterName,
+      };
+    }) || [];
 
-  const userSid = extractId(user?.shelterId);
-  if (userSid && !allApproved.find((s) => s.id === userSid)) {
-    const userShelterName =
-      typeof user?.shelterId === "object"
-        ? user.shelterId.name
-        : "Default Shelter";
-    allApproved.unshift({
-      id: userSid,
-      name: userShelterName,
-    });
-  }
+  const normalizedActiveShelterId = extractId(activeShelterId as any);
 
-  // Deduplicate and filter out undefined IDs
-  const approvedShelters = allApproved.filter(
-    (s, index, self) => s.id && self.findIndex((t) => t.id === s.id) === index,
-  );
+  const currentShelterName =
+    allApproved.find((s) => s.id === normalizedActiveShelterId)?.name ||
+    "Shelter";
 
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -88,21 +60,25 @@ export default function ApplicationsQueue() {
     null,
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [conflictInfo, setConflictInfo] = useState<{
+    attemptedStatus: string;
+    latest?: AdoptionApplication;
+  } | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["applications", page, statusFilter, activeShelterId],
+    queryKey: ["applications", page, statusFilter, normalizedActiveShelterId],
     queryFn: async () => {
       const response = await api.get("/applications", {
         params: {
           page,
           limit: 10,
           status: statusFilter !== "all" ? statusFilter : undefined,
-          shelterId: activeShelterId,
+          shelterId: normalizedActiveShelterId,
         },
       });
       return response.data;
     },
-    enabled: !!activeShelterId || user?.role === "admin",
+    enabled: !!normalizedActiveShelterId || user?.role === "admin",
   });
 
   const updateStatusMutation = useMutation({
@@ -110,17 +86,49 @@ export default function ApplicationsQueue() {
       id,
       status,
       notes,
+      expectedVersion,
     }: {
       id: string;
       status: string;
       notes?: string;
-    }) => api.patch(`/applications/${id}/status`, { status, notes }),
+      expectedVersion?: number;
+    }) =>
+      api.patch(`/applications/${id}/status`, {
+        status,
+        notes,
+        expectedVersion,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["applications"] });
       toast.success("Application status updated");
+      setConflictInfo(null);
       setIsModalOpen(false);
     },
-    onError: (error: AxiosError<{ message: string }>) => {
+    onError: (
+      error: AxiosError<ApiErrorResponse>,
+      variables: {
+        id: string;
+        status: string;
+        notes?: string;
+        expectedVersion?: number;
+      },
+    ) => {
+      const details = error.response?.data?.details;
+      if (
+        error.response?.status === 409 &&
+        details?.code === "APPLICATION_VERSION_CONFLICT"
+      ) {
+        const latest = details.currentApplication;
+        setConflictInfo({
+          attemptedStatus: variables.status,
+          latest,
+        });
+        if (latest) {
+          setSelectedApp(latest);
+        }
+        toast.error("Merge conflict detected. Review latest changes and retry.");
+        return;
+      }
       toast.error(error.response?.data?.message || "Failed to update status");
     },
   });
@@ -151,10 +159,20 @@ export default function ApplicationsQueue() {
     try {
       const response = await api.get(`/applications/${id}`);
       setSelectedApp(response.data.data.application);
+      setConflictInfo(null);
       setIsModalOpen(true);
     } catch (error) {
       toast.error("Failed to load application details");
     }
+  };
+
+  const submitStatusUpdate = (status: string) => {
+    if (!selectedApp) return;
+    updateStatusMutation.mutate({
+      id: selectedApp._id,
+      status,
+      expectedVersion: selectedApp.__v,
+    });
   };
 
   return (
@@ -164,26 +182,9 @@ export default function ApplicationsQueue() {
           <h1 className="text-2xl font-bold text-gray-900">
             Applications Queue
           </h1>
-          {approvedShelters.length > 1 ? (
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-500">
-                Managing:
-              </span>
-              <select
-                value={activeShelterId}
-                onChange={(e) => setActiveShelterId(e.target.value)}
-                className="text-sm font-semibold text-primary-600 bg-primary-50 border-none rounded-lg focus:ring-0 cursor-pointer py-1"
-              >
-                {approvedShelters.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : approvedShelters.length === 1 ? (
+          {normalizedActiveShelterId ? (
             <p className="text-sm font-semibold text-primary-600">
-              Managing: {approvedShelters[0].name}
+              Managing: {currentShelterName}
             </p>
           ) : (
             <p className="text-gray-500">
@@ -500,13 +501,20 @@ export default function ApplicationsQueue() {
             </div>
 
             <div className="p-6 border-t border-gray-100 flex flex-wrap gap-3 bg-gray-50">
+              {conflictInfo && (
+                <div className="w-full mb-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <p className="font-semibold">Merge conflict</p>
+                  <p>
+                    Another staff member updated this application.
+                    {conflictInfo.latest?.status
+                      ? ` Latest status: ${conflictInfo.latest.status}.`
+                      : ""}{" "}
+                    Your attempted change: {conflictInfo.attemptedStatus}.
+                  </p>
+                </div>
+              )}
               <button
-                onClick={() =>
-                  updateStatusMutation.mutate({
-                    id: selectedApp._id,
-                    status: "reviewing",
-                  })
-                }
+                onClick={() => submitStatusUpdate("reviewing")}
                 disabled={
                   selectedApp.status === "reviewing" ||
                   updateStatusMutation.isPending
@@ -516,12 +524,7 @@ export default function ApplicationsQueue() {
                 Mark as Reviewing
               </button>
               <button
-                onClick={() =>
-                  updateStatusMutation.mutate({
-                    id: selectedApp._id,
-                    status: "interview",
-                  })
-                }
+                onClick={() => submitStatusUpdate("interview")}
                 disabled={
                   selectedApp.status === "interview" ||
                   updateStatusMutation.isPending
@@ -531,12 +534,7 @@ export default function ApplicationsQueue() {
                 Schedule Interview
               </button>
               <button
-                onClick={() =>
-                  updateStatusMutation.mutate({
-                    id: selectedApp._id,
-                    status: "approved",
-                  })
-                }
+                onClick={() => submitStatusUpdate("approved")}
                 disabled={
                   selectedApp.status === "approved" ||
                   updateStatusMutation.isPending
@@ -546,12 +544,7 @@ export default function ApplicationsQueue() {
                 Approve
               </button>
               <button
-                onClick={() =>
-                  updateStatusMutation.mutate({
-                    id: selectedApp._id,
-                    status: "rejected",
-                  })
-                }
+                onClick={() => submitStatusUpdate("rejected")}
                 disabled={
                   selectedApp.status === "rejected" ||
                   updateStatusMutation.isPending

@@ -13,6 +13,7 @@ export const createShelterValidation = [
   body("location.coordinates")
     .isArray({ min: 2, max: 2 })
     .withMessage("Coordinates must be [longitude, latitude]"),
+  body("timezone").optional().isString().withMessage("Timezone must be a string"),
   body("capacity").isInt({ min: 1 }).withMessage("Capacity must be at least 1"),
 ];
 

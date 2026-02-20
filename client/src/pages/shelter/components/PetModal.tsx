@@ -1,17 +1,24 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { X, Upload, Plus, Trash2 } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../../../lib/api";
 import toast from "react-hot-toast";
 import { useAppSelector } from "../../../store/store";
 import { AxiosError } from "axios";
+import { queueOfflinePetOperation } from "../../../lib/offlinePetQueue";
 
 const coercedBoolean = z
   .union([z.boolean(), z.enum(["true", "false"])])
   .transform((value) => value === true || value === "true");
+
+const isAbsoluteUrl = (value: string) => z.string().url().safeParse(value).success;
+const isUploadPath = (value: string) => /^\/uploads\/.+/i.test(value);
+const isDataImageUrl = (value: string) => /^data:image\/[a-zA-Z0-9+.-]+;base64,/i.test(value);
+const isValidImageLink = (value: string) =>
+  isAbsoluteUrl(value) || isUploadPath(value) || isDataImageUrl(value);
 
 const petSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -36,8 +43,30 @@ const petSchema = z.object({
     specialNeedsDescription: z.string().optional(),
   }),
   photos: z
-    .array(z.object({ url: z.string().url("Must be a valid URL") }))
+    .array(
+      z.object({
+        url: z.string().refine(isValidImageLink, {
+          message: "Must be a valid URL or uploaded image path",
+        }),
+      }),
+    )
     .default([]),
+  vaccinationReportPdf: z
+    .string()
+    .optional()
+    .refine((value) => !value || isAbsoluteUrl(value) || isUploadPath(value), {
+      message: "Must be a valid URL or uploaded file path",
+    })
+    .refine((value) => !value || /\.pdf($|\?)/i.test(value), {
+      message: "Vaccination report must be a PDF link",
+    }),
+  vetEmailForRelease: z
+    .string()
+    .optional()
+    .refine((value) => !value || z.string().email().safeParse(value).success, {
+      message: "Please provide a valid vet email",
+    }),
+  vetReleaseNote: z.string().optional(),
 });
 
 type PetFormData = z.infer<typeof petSchema>;
@@ -59,11 +88,19 @@ export default function PetModal({
 }: PetModalProps) {
   const queryClient = useQueryClient();
   const { user } = useAppSelector((state) => state.auth);
+  const [vaccinationReportFileName, setVaccinationReportFileName] =
+    useState<string>("");
+  const [uploadingReport, setUploadingReport] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [medicalViewMode, setMedicalViewMode] = useState<"effective" | "audit">(
+    "effective",
+  );
 
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
     control,
     watch,
     formState: { errors },
@@ -83,6 +120,9 @@ export default function PetModal({
         specialNeedsDescription: "",
       },
       photos: [],
+      vaccinationReportPdf: "",
+      vetEmailForRelease: "",
+      vetReleaseNote: "",
     },
   });
 
@@ -91,8 +131,18 @@ export default function PetModal({
     name: "photos",
   });
 
+  const { data: medicalTimelineData } = useQuery({
+    queryKey: ["medical-timeline", pet?._id],
+    queryFn: async () => {
+      const response = await api.get(`/medical/pets/${pet?._id}/timeline`);
+      return response.data;
+    },
+    enabled: !!pet?._id,
+  });
+
   useEffect(() => {
     if (pet) {
+      setVaccinationReportFileName("");
       reset({
         name: pet.name,
         species: pet.species,
@@ -116,8 +166,12 @@ export default function PetModal({
           specialNeedsDescription: "",
         },
         photos: pet.photos?.map((url: string) => ({ url })) || [],
+        vaccinationReportPdf: "",
+        vetEmailForRelease: "",
+        vetReleaseNote: "",
       });
     } else {
+      setVaccinationReportFileName("");
       reset({
         name: "",
         species: "dog",
@@ -141,34 +195,138 @@ export default function PetModal({
           specialNeedsDescription: "",
         },
         photos: [],
+        vaccinationReportPdf: "",
+        vetEmailForRelease: "",
+        vetReleaseNote: "",
       });
     }
   }, [pet, reset, isOpen]);
 
   const mutation = useMutation({
     mutationFn: async (data: PetFormData) => {
+      const {
+        vaccinationReportPdf,
+        vetEmailForRelease,
+        vetReleaseNote,
+        ...formData
+      } = data;
       const payload = {
-        ...data,
-        photos: data.photos.map((p: { url: string }) => p.url),
+        ...formData,
+        photos: formData.photos.map((p: { url: string }) => p.url),
+      };
+      const canQueueOffline = user?.role === "shelter_staff";
+      const queuedResponse = { data: { offlineQueued: true } };
+
+      const createVaccinationRecord = async (petId: string) => {
+        if (!vaccinationReportPdf || !data.health.vaccinated) return;
+
+        await api.post(`/medical/pets/${petId}/records`, {
+          recordType: "vaccination",
+          title: "Vaccination Record",
+          description: "Vaccination record submitted from pet form",
+          date: new Date().toISOString(),
+          documents: [vaccinationReportPdf],
+        });
+      };
+
+      const appendVaccinationCorrection = async (petId: string) => {
+        if (!vaccinationReportPdf || !data.health.vaccinated) return;
+
+        const timelineResponse = await api.get(`/medical/pets/${petId}/timeline`);
+        const auditTrail = timelineResponse.data?.data?.auditTrail || [];
+        const latestVaccination = [...auditTrail]
+          .reverse()
+          .find((record: any) => record.recordType === "vaccination");
+
+        if (!latestVaccination?._id) {
+          await createVaccinationRecord(petId);
+          return;
+        }
+
+        await api.post(
+          `/medical/pets/${petId}/records/${latestVaccination._id}/corrections`,
+          {
+            title: "Vaccination Record Correction",
+            description:
+              "Correction record submitted from pet form with updated report",
+            date: new Date().toISOString(),
+            documents: [vaccinationReportPdf],
+          },
+        );
       };
 
       if (pet) {
         // For updates, handle status separately
         const statusChanged = pet.status !== data.status;
         const { status, ...petDataWithoutStatus } = payload;
+        const needsVetSignoff =
+          pet.status === "medical_hold" && status === "available";
 
-        // Update pet info (without status)
-        const updateResponse = await api.patch(
-          `/pets/${pet._id}`,
-          petDataWithoutStatus,
-        );
-
-        // If status changed, update it separately
-        if (statusChanged && status) {
-          await api.patch(`/pets/${pet._id}/status`, { status });
+        if (needsVetSignoff && !vetEmailForRelease) {
+          throw new Error(
+            "Vet email is required to release pet from medical hold.",
+          );
         }
 
-        return updateResponse;
+        if (needsVetSignoff && !navigator.onLine) {
+          throw new Error(
+            "Internet is required to send vet sign-off email request.",
+          );
+        }
+
+        if (canQueueOffline && !navigator.onLine) {
+          queueOfflinePetOperation({
+            type: "update",
+            petId: pet._id,
+            payload: {
+              petDataWithoutStatus,
+              statusChanged,
+              status,
+            },
+          });
+          return queuedResponse;
+        }
+
+        try {
+          // Update pet info (without status)
+          const updateResponse = await api.patch(
+            `/pets/${pet._id}`,
+            petDataWithoutStatus,
+          );
+
+          // If status changed, update it separately
+          if (statusChanged && status) {
+            if (needsVetSignoff) {
+              await api.post(`/pets/${pet._id}/request-vet-signoff`, {
+                vetEmail: vetEmailForRelease,
+                requestNote: vetReleaseNote,
+              });
+            } else {
+              await api.patch(`/pets/${pet._id}/status`, { status });
+            }
+          }
+
+          if (vaccinationReportPdf && data.health.vaccinated) {
+            await appendVaccinationCorrection(pet._id);
+          }
+
+          return updateResponse;
+        } catch (error) {
+          const axiosError = error as AxiosError;
+          if (canQueueOffline && (!axiosError.response || axiosError.code === "ERR_NETWORK")) {
+            queueOfflinePetOperation({
+              type: "update",
+              petId: pet._id,
+              payload: {
+                petDataWithoutStatus,
+                statusChanged,
+                status,
+              },
+            });
+            return queuedResponse;
+          }
+          throw error;
+        }
       } else {
         const getEffectiveShelterId = () => {
           if (forceShelterId) return forceShelterId;
@@ -197,15 +355,59 @@ export default function PetModal({
           );
         }
 
-        return api.post("/pets", { ...payload, shelterId });
+        if (canQueueOffline && !navigator.onLine) {
+          queueOfflinePetOperation({
+            type: "create",
+            shelterId,
+            payload,
+          });
+          return queuedResponse;
+        }
+
+        try {
+          const createResponse = await api.post("/pets", { ...payload, shelterId });
+          const createdPetId = createResponse.data?.data?.pet?._id;
+          if (createdPetId) {
+            await createVaccinationRecord(createdPetId);
+          }
+          return createResponse;
+        } catch (error) {
+          const axiosError = error as AxiosError;
+          if (canQueueOffline && (!axiosError.response || axiosError.code === "ERR_NETWORK")) {
+            queueOfflinePetOperation({
+              type: "create",
+              shelterId,
+              payload,
+            });
+            return queuedResponse;
+          }
+          throw error;
+        }
       }
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ["shelter-pets"] });
       queryClient.invalidateQueries({ queryKey: ["shelter-pet-stats"] });
-      toast.success(
-        pet ? "Pet updated successfully" : "Pet created successfully",
-      );
+      if (pet?._id) {
+        queryClient.invalidateQueries({ queryKey: ["medical-timeline", pet._id] });
+      }
+      if (result?.data?.offlineQueued) {
+        toast.success(
+          pet
+            ? "Offline: pet update saved locally and will sync automatically."
+            : "Offline: pet creation saved locally and will sync automatically.",
+        );
+      } else {
+        if (pet && pet.status === "medical_hold" && watch("status") === "available") {
+          toast.success(
+            "Pet details updated and vet sign-off request sent. Status will auto-change after vet approval.",
+          );
+        } else {
+          toast.success(
+            pet ? "Pet updated successfully" : "Pet created successfully",
+          );
+        }
+      }
       onClose();
     },
     onError: (error: unknown) => {
@@ -218,7 +420,124 @@ export default function PetModal({
   });
 
   const onSubmit = (data: PetFormData) => {
+    const previousVaccinated = pet?.health?.vaccinated ?? false;
+    const vaccinationChanged =
+      !pet ? data.health.vaccinated : previousVaccinated !== data.health.vaccinated;
+
+    if (vaccinationChanged && !data.vaccinationReportPdf) {
+      toast.error("Please add vaccination report PDF link before submitting.");
+      return;
+    }
+
     mutation.mutate(data);
+  };
+
+  const handleVaccinationReportUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const isPdf =
+      file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+    if (!isPdf) {
+      toast.error("Please upload a PDF file only.");
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      setUploadingReport(true);
+      const formData = new FormData();
+      formData.append("report", file);
+
+      const response = await api.post("/medical/upload-report", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      const uploadedUrl = response.data?.data?.url;
+      if (!uploadedUrl) {
+        throw new Error("Upload failed");
+      }
+
+      setVaccinationReportFileName(file.name);
+      setValue("vaccinationReportPdf", uploadedUrl, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+      toast.success("Vaccination PDF uploaded.");
+    } catch (error) {
+      const axiosError = error as AxiosError<{ message: string }>;
+      toast.error(
+        axiosError.response?.data?.message || "Failed to upload PDF report",
+      );
+      event.target.value = "";
+    } finally {
+      setUploadingReport(false);
+    }
+  };
+
+  const handlePetPhotoUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file.");
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      setUploadingPhoto(true);
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const response = await api.post("/pets/upload-image", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      const uploadedUrl = response.data?.data?.url;
+      if (!uploadedUrl) {
+        throw new Error("Upload failed");
+      }
+
+      append({ url: uploadedUrl });
+      toast.success("Pet image uploaded.");
+    } catch (error) {
+      const axiosError = error as AxiosError<{ message: string }>;
+      const isNetworkIssue = !axiosError.response || axiosError.code === "ERR_NETWORK";
+      if (user?.role === "shelter_staff" && isNetworkIssue) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = typeof reader.result === "string" ? reader.result : "";
+          if (result) {
+            append({ url: result });
+            toast.success(
+              "Offline: image stored locally. It will upload automatically when syncing.",
+            );
+          } else {
+            toast.error("Failed to read image for offline storage.");
+          }
+        };
+        reader.onerror = () => {
+          toast.error("Failed to read image for offline storage.");
+        };
+        reader.readAsDataURL(file);
+      } else {
+        toast.error(
+          axiosError.response?.data?.message || "Failed to upload pet image",
+        );
+      }
+    } finally {
+      setUploadingPhoto(false);
+      event.target.value = "";
+    }
   };
 
   if (!isOpen) return null;
@@ -400,6 +719,44 @@ export default function PetModal({
                 )}
               </div>
 
+              {pet &&
+                pet.status === "medical_hold" &&
+                watch("status") === "available" && (
+                  <div className="md:col-span-2 p-4 rounded-xl border border-amber-200 bg-amber-50 space-y-3">
+                    <p className="text-sm font-semibold text-amber-800">
+                      Vet sign-off is required to move from Medical Hold to Available.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium text-gray-700">
+                          Vet Email <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="email"
+                          {...register("vetEmailForRelease")}
+                          className={`w-full px-4 py-2 border rounded-xl outline-none transition-all ${errors.vetEmailForRelease ? "border-red-500 ring-1 ring-red-500" : "border-gray-200 focus:ring-2 focus:ring-primary-500"}`}
+                          placeholder="vet@example.com"
+                        />
+                        {errors.vetEmailForRelease && (
+                          <p className="text-xs text-red-500">
+                            {errors.vetEmailForRelease.message}
+                          </p>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium text-gray-700">
+                          Note for Vet (optional)
+                        </label>
+                        <input
+                          {...register("vetReleaseNote")}
+                          className="w-full px-4 py-2 border rounded-xl outline-none transition-all border-gray-200 focus:ring-2 focus:ring-primary-500"
+                          placeholder="Medical summary..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
               <div className="md:col-span-2 space-y-4">
                 <h3 className="text-sm font-semibold text-primary-600 uppercase tracking-wider">
                   Health & Medical{" "}
@@ -509,6 +866,49 @@ export default function PetModal({
                     />
                   </div>
                 )}
+
+                {watch("health.vaccinated") && (
+                  <div className="space-y-1 mt-4">
+                    <label className="text-sm font-medium text-gray-700">
+                      Vaccination Report (PDF File)
+                    </label>
+                    <input type="hidden" {...register("vaccinationReportPdf")} />
+                    <input
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      onChange={handleVaccinationReportUpload}
+                      className={`w-full px-4 py-2 border rounded-xl outline-none transition-all file:mr-4 file:rounded-lg file:border-0 file:bg-primary-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-700 hover:file:bg-primary-100 ${
+                        errors.vaccinationReportPdf
+                          ? "border-red-500 ring-1 ring-red-500"
+                          : "border-gray-200 focus:ring-2 focus:ring-primary-500"
+                      }`}
+                    />
+                    {vaccinationReportFileName && (
+                      <p className="text-xs text-green-600 flex items-center gap-2">
+                        Uploaded: {vaccinationReportFileName}
+                        {watch("vaccinationReportPdf") && (
+                          <a
+                            href={watch("vaccinationReportPdf")}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download
+                            className="underline text-primary-700 hover:text-primary-800"
+                          >
+                            Download PDF
+                          </a>
+                        )}
+                      </p>
+                    )}
+                    {uploadingReport && (
+                      <p className="text-xs text-primary-600">Uploading PDF...</p>
+                    )}
+                    {errors.vaccinationReportPdf && (
+                      <p className="text-xs text-red-500">
+                        {errors.vaccinationReportPdf.message}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="md:col-span-2 space-y-4">
@@ -538,19 +938,153 @@ export default function PetModal({
                 </div>
               </div>
 
+              {pet && (
+                <div className="md:col-span-2 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-primary-600 uppercase tracking-wider">
+                      Vaccination Timeline
+                    </h3>
+                    <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setMedicalViewMode("effective")}
+                        className={`px-3 py-1.5 text-xs font-medium ${
+                          medicalViewMode === "effective"
+                            ? "bg-primary-600 text-white"
+                            : "bg-white text-gray-600 hover:bg-gray-50"
+                        }`}
+                      >
+                        Effective
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMedicalViewMode("audit")}
+                        className={`px-3 py-1.5 text-xs font-medium border-l border-gray-200 ${
+                          medicalViewMode === "audit"
+                            ? "bg-primary-600 text-white"
+                            : "bg-white text-gray-600 hover:bg-gray-50"
+                        }`}
+                      >
+                        Audit Trail
+                      </button>
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const timeline = medicalTimelineData?.data;
+                    const records =
+                      medicalViewMode === "effective"
+                        ? timeline?.effectiveTimeline || []
+                        : timeline?.auditTrail || [];
+
+                    if (records.length === 0) {
+                      return (
+                        <div className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
+                          No medical records available yet.
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        {records.map((record: any) => (
+                          <div
+                            key={record._id}
+                            className="rounded-xl border border-gray-200 bg-gray-50 p-3"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-gray-900">
+                                {record.title}
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 uppercase">
+                                  {String(record.recordType).replace("_", " ")}
+                                </span>
+                                {record.isCorrected && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                                    Corrected
+                                  </span>
+                                )}
+                                {record.recordType === "correction" && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                                    Correction
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-600 mt-1">
+                              {record.description}
+                            </p>
+                            <div className="mt-2 text-[11px] text-gray-500 flex flex-wrap gap-x-3 gap-y-1">
+                              <span>
+                                Date:{" "}
+                                {record.date
+                                  ? new Date(record.date).toLocaleDateString()
+                                  : "-"}
+                              </span>
+                              {record.correctsRecordId && (
+                                <span>Corrects ID: {record.correctsRecordId}</span>
+                              )}
+                              {record.appliedCorrectionId && (
+                                <span>
+                                  Applied Correction ID: {record.appliedCorrectionId}
+                                </span>
+                              )}
+                            </div>
+                            {Array.isArray(record.documents) &&
+                              record.documents.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {record.documents.map(
+                                    (doc: string, docIndex: number) => (
+                                      <a
+                                        key={`${record._id}-doc-${docIndex}`}
+                                        href={doc}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        download
+                                        className="text-xs px-2 py-1 rounded border border-primary-200 text-primary-700 bg-white hover:bg-primary-50"
+                                      >
+                                        Download PDF
+                                      </a>
+                                    ),
+                                  )}
+                                </div>
+                              )}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               <div className="md:col-span-2 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-primary-600 uppercase tracking-wider">
                     Photos
                   </h3>
-                  <button
-                    type="button"
-                    onClick={() => append({ url: "" })}
-                    className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" /> Add Photo URL
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => append({ url: "" })}
+                      className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> Add Photo URL
+                    </button>
+                    <label className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1 cursor-pointer">
+                      <Upload className="w-3 h-3" /> Upload From Device
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handlePetPhotoUpload}
+                      />
+                    </label>
+                  </div>
                 </div>
+                {uploadingPhoto && (
+                  <p className="text-xs text-primary-600">Uploading photo...</p>
+                )}
 
                 <div className="grid grid-cols-1 gap-3">
                   {fields.map((field, index) => (
@@ -608,7 +1142,7 @@ export default function PetModal({
           <button
             form="pet-form"
             type="submit"
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || uploadingReport || uploadingPhoto}
             className="btn btn-primary px-8 py-2 rounded-xl flex items-center gap-2"
           >
             {mutation.isPending ? (

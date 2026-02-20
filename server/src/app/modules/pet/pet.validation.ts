@@ -55,6 +55,27 @@ export const updateStatusValidation = [
     .withMessage("Invalid status"),
 ];
 
+export const requestVetSignoffValidation = [
+  body("vetEmail")
+    .isEmail()
+    .withMessage("Please provide a valid vet email")
+    .normalizeEmail(),
+  body("requestNote").optional().isString().isLength({ max: 1000 }),
+];
+
+export const createPetTransferValidation = [
+  body("petId").isMongoId().withMessage("Invalid pet ID"),
+  body("toShelterId").isMongoId().withMessage("Invalid target shelter ID"),
+  body("note").optional().isString().isLength({ max: 1000 }),
+];
+
+export const respondPetTransferValidation = [
+  body("decision")
+    .isIn(["approved", "rejected"])
+    .withMessage("Decision must be approved or rejected"),
+  body("decisionNote").optional().isString().isLength({ max: 1000 }),
+];
+
 export const searchPetsValidation = [
   query("species").optional().isIn(["dog", "cat", "bird", "rabbit", "other"]),
   query("breed").optional().trim(),

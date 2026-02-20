@@ -7,6 +7,8 @@ import toast from "react-hot-toast";
 import { FosterAssignment } from "../../types";
 import { AxiosError } from "axios";
 
+import { useAppSelector } from "../../store/store";
+
 // Components
 import AssignPetModal from "../../components/foster/AssignPetModal";
 import TakeBackModal from "../../components/foster/TakeBackModal";
@@ -15,6 +17,32 @@ import FosterTable from "../../components/foster/FosterTable";
 
 export default function FosterBoard() {
   const queryClient = useQueryClient();
+  const { user, activeShelterId } = useAppSelector((state) => state.auth);
+
+  const extractId = (
+    val: string | { _id?: string; id?: string } | null | undefined,
+  ): string | undefined => {
+    if (!val || val === "null") return undefined;
+    if (typeof val === "string") return val;
+    return val._id || val.id;
+  };
+
+  const allApproved =
+    user?.memberships?.map((m) => {
+      const shelterName =
+        typeof m.shelterId === "object" ? m.shelterId.name : "Primary Shelter";
+      return {
+        id: extractId(m.shelterId),
+        name: shelterName,
+      };
+    }) || [];
+
+  const normalizedActiveShelterId = extractId(activeShelterId as any);
+
+  const currentShelterName =
+    allApproved.find((s) => s.id === normalizedActiveShelterId)?.name ||
+    "Shelter";
+
   const [activeTab, setActiveTab] = useState<"assignments" | "parents">(
     "assignments",
   );
@@ -25,32 +53,42 @@ export default function FosterBoard() {
   const [returnNotes, setReturnNotes] = useState("");
 
   const { data: assignmentsData, isLoading: assignmentsLoading } = useQuery({
-    queryKey: ["foster-assignments"],
+    queryKey: ["foster-assignments", normalizedActiveShelterId],
     queryFn: async () => {
-      const response = await api.get("/fosters/assignments");
-      return response.data;
-    },
-    enabled: activeTab === "assignments",
-  });
-
-  const { data: fostersData, isLoading: fostersLoading } = useQuery({
-    queryKey: ["fosters"],
-    queryFn: async () => {
-      const response = await api.get("/fosters");
-      return response.data;
-    },
-    enabled: activeTab === "parents" || isAssignModalOpen,
-  });
-
-  const { data: availablePets } = useQuery({
-    queryKey: ["available-pets-for-foster"],
-    queryFn: async () => {
-      const response = await api.get("/pets", {
-        params: { status: "available" },
+      const response = await api.get("/fosters/assignments", {
+        params: { shelterId: normalizedActiveShelterId },
       });
       return response.data;
     },
-    enabled: isAssignModalOpen,
+    enabled:
+      activeTab === "assignments" &&
+      (!!normalizedActiveShelterId || user?.role === "admin"),
+  });
+
+  const { data: fostersData, isLoading: fostersLoading } = useQuery({
+    queryKey: ["fosters", normalizedActiveShelterId],
+    queryFn: async () => {
+      const response = await api.get("/fosters", {
+        params: { shelterId: normalizedActiveShelterId },
+      });
+      return response.data;
+    },
+    enabled:
+      (activeTab === "parents" || isAssignModalOpen) &&
+      (!!normalizedActiveShelterId || user?.role === "admin"),
+  });
+
+  const { data: availablePets } = useQuery({
+    queryKey: ["available-pets-for-foster", normalizedActiveShelterId],
+    queryFn: async () => {
+      const response = await api.get("/pets", {
+        params: { status: "available", shelterId: normalizedActiveShelterId },
+      });
+      return response.data;
+    },
+    enabled:
+      isAssignModalOpen &&
+      (!!normalizedActiveShelterId || user?.role === "admin"),
   });
 
   const assignMutation = useMutation({
@@ -131,11 +169,17 @@ export default function FosterBoard() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
+        <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-bold text-gray-900">Foster Board</h1>
-          <p className="text-gray-500">
-            Manage foster assignments and parents.
-          </p>
+          {normalizedActiveShelterId ? (
+            <p className="text-sm font-semibold text-primary-600">
+              Managing: {currentShelterName}
+            </p>
+          ) : (
+            <p className="text-gray-500">
+              Manage foster assignments and parents.
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
           <button

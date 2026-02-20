@@ -12,6 +12,7 @@ import {
   verifyEmailVerificationToken,
   verifyPasswordResetToken,
   verifyRefreshToken,
+  UserMembership,
 } from "../../common/utils/jwt";
 import {
   sendVerificationEmail,
@@ -19,8 +20,23 @@ import {
 } from "../../common/utils/mail";
 import { AuditLog } from "../audit/audit.model";
 
+const normalizeMemberships = (
+  memberships: Array<{
+    shelterId?: { toString: () => string } | string | null;
+    role: "admin" | "shelter_staff" | "adopter";
+  }> = [],
+) : UserMembership[] => {
+  return memberships
+    .filter((m) => m?.shelterId)
+    .map((m) => ({
+      shelterId:
+        typeof m.shelterId === "string" ? m.shelterId : m.shelterId!.toString(),
+      role: m.role,
+    }));
+};
+
 export const register = catchAsync(async (req: Request, res: Response) => {
-  const { email, password, firstName, lastName, role } = req.body;
+  const { email, password, firstName, lastName, roles } = req.body;
 
   // Check if user exists
   const existingUser = await User.findOne({ email });
@@ -28,13 +44,22 @@ export const register = catchAsync(async (req: Request, res: Response) => {
     throw new AppError(409, "Email already registered");
   }
 
+  // Choose primary role based on highest privilege for backward compatibility
+  const selectedRoles =
+    Array.isArray(roles) && roles.length > 0 ? roles : ["adopter"];
+  let primaryRole = "adopter";
+  if (selectedRoles.includes("admin")) primaryRole = "admin";
+  else if (selectedRoles.includes("shelter_staff"))
+    primaryRole = "shelter_staff";
+
   // Create user
   const user = await User.create({
     email,
     password,
     firstName,
     lastName,
-    role: role || "adopter",
+    role: primaryRole,
+    roles: selectedRoles,
   });
 
   // Generate verification token
@@ -64,6 +89,9 @@ export const register = catchAsync(async (req: Request, res: Response) => {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        roles: user.roles,
+        isEmailVerified: user.isEmailVerified,
+        staffApplications: [],
       },
     },
   });
@@ -73,7 +101,11 @@ export const login = catchAsync(async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
   // Find user with password field
-  const user = await User.findOne({ email }).select("+password");
+  const user = await User.findOne({ email })
+    .select("+password")
+    .populate("shelterId")
+    .populate("memberships.shelterId");
+
   if (!user) {
     throw new AppError(401, "Invalid credentials");
   }
@@ -94,12 +126,35 @@ export const login = catchAsync(async (req: Request, res: Response) => {
     throw new AppError(403, "Please verify your email address to log in.");
   }
 
+  // Fetch staff applications if they're staff
+  let staffApplications: IStaffApplication[] = [];
+  if (user.role === "shelter_staff") {
+    const { StaffApplication } =
+      await import("../shelter/staff-application.model");
+    staffApplications = (await StaffApplication.find({
+      userId: user._id,
+    }).populate("shelterId")) as unknown as IStaffApplication[];
+  }
+
+  // Aggregate all roles from memberships and primary role
+  const allRoles = new Set<string>();
+  if (user.role) allRoles.add(user.role);
+  user.roles?.forEach((r) => allRoles.add(r));
+  const safeMemberships = normalizeMemberships(
+    (user.memberships || []) as unknown as Array<{
+      shelterId?: { toString: () => string } | string | null;
+      role: "admin" | "shelter_staff" | "adopter";
+    }>,
+  );
+  safeMemberships.forEach((m) => allRoles.add(m.role));
+
   // Generate tokens
   const tokenPayload = {
     id: user._id.toString(),
     email: user.email,
     role: user.role,
-    shelterId: user.shelterId?.toString(),
+    roles: Array.from(allRoles),
+    memberships: safeMemberships,
   };
 
   const accessToken = generateAccessToken(tokenPayload);
@@ -153,8 +208,11 @@ export const login = catchAsync(async (req: Request, res: Response) => {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        roles: user.roles,
         isEmailVerified: user.isEmailVerified,
         shelterId: user.shelterId,
+        memberships: safeMemberships,
+        staffApplications,
       },
     },
   });
@@ -331,12 +389,25 @@ export const refreshAccessToken = catchAsync(
       throw new AppError(401, "User no longer exists");
     }
 
+    // Aggregate all roles
+    const allRoles = new Set<string>();
+    if (user.role) allRoles.add(user.role);
+    user.roles?.forEach((r) => allRoles.add(r));
+    const safeMemberships = normalizeMemberships(
+      (user.memberships || []) as unknown as Array<{
+        shelterId?: { toString: () => string } | string | null;
+        role: "admin" | "shelter_staff" | "adopter";
+      }>,
+    );
+    safeMemberships.forEach((m) => allRoles.add(m.role));
+
     // Generate new access token with fresh data
     const accessToken = generateAccessToken({
       id: user._id.toString(),
       email: user.email,
       role: user.role,
-      shelterId: user.shelterId?.toString(),
+      roles: Array.from(allRoles),
+      memberships: safeMemberships,
     });
 
     res.cookie("accessToken", accessToken, {
@@ -354,7 +425,9 @@ export const refreshAccessToken = catchAsync(
 );
 
 export const getMe = catchAsync(async (req: Request, res: Response) => {
-  const user = await User.findById(req.user!.id).populate("shelterId");
+  const user = await User.findById(req.user!.id)
+    .populate("shelterId")
+    .populate("memberships.shelterId");
 
   if (!user) {
     throw new AppError(404, "User not found");
@@ -369,6 +442,13 @@ export const getMe = catchAsync(async (req: Request, res: Response) => {
     }).populate("shelterId")) as unknown as IStaffApplication[];
   }
 
+  const safeMemberships = normalizeMemberships(
+    (user.memberships || []) as unknown as Array<{
+      shelterId?: { toString: () => string } | string | null;
+      role: "admin" | "shelter_staff" | "adopter";
+    }>,
+  );
+
   res.json({
     success: true,
     data: {
@@ -380,8 +460,16 @@ export const getMe = catchAsync(async (req: Request, res: Response) => {
         phone: user.phone,
         address: user.address,
         role: user.role,
+        roles: Array.from(
+          new Set([
+            user.role,
+            ...(user.roles || []),
+            ...safeMemberships.map((m) => m.role),
+          ]),
+        ),
         isEmailVerified: user.isEmailVerified,
         shelterId: user.shelterId,
+        memberships: safeMemberships,
         staffApplications,
       },
     },

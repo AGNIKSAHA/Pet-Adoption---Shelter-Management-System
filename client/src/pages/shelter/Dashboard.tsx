@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { useState, useEffect } from "react";
 import { useAppSelector } from "../../store/store";
 import {
   Users,
@@ -21,7 +20,7 @@ interface Activity {
 }
 
 export default function Dashboard() {
-  const { user } = useAppSelector((state) => state.auth);
+  const { user, activeShelterId } = useAppSelector((state) => state.auth);
 
   const extractId = (
     val: string | { _id?: string; id?: string } | null | undefined,
@@ -31,69 +30,31 @@ export default function Dashboard() {
     return val._id || val.id;
   };
 
-  const getEffectiveShelterId = () => {
-    const sid = extractId(user?.shelterId);
-    if (sid) return sid;
-
-    const approvedApp = user?.staffApplications?.find(
-      (app) => app.status === "approved",
-    );
-
-    return extractId(approvedApp?.shelterId);
-  };
-
-  const effectiveShelterId = getEffectiveShelterId();
-  const [activeShelterId, setActiveShelterId] = useState<string | undefined>(
-    effectiveShelterId,
-  );
-
-  // Sync activeShelterId if effectiveShelterId changes and activeShelterId is not set
-  useEffect(() => {
-    if (!activeShelterId && effectiveShelterId) {
-      setActiveShelterId(effectiveShelterId);
-    }
-  }, [effectiveShelterId, activeShelterId]);
-
   const allApproved =
-    user?.staffApplications
-      ?.filter((app) => app.status === "approved")
-      ?.map((app) => {
-        const shelterName =
-          typeof app.shelterId === "object"
-            ? app.shelterId.name
-            : "Primary Shelter";
-        return {
-          id: extractId(app.shelterId),
-          name: shelterName,
-        };
-      }) || [];
+    user?.memberships?.map((m) => {
+      const shelterName =
+        typeof m.shelterId === "object" ? m.shelterId.name : "Primary Shelter";
+      return {
+        id: extractId(m.shelterId),
+        name: shelterName,
+      };
+    }) || [];
 
-  const userSid = extractId(user?.shelterId);
-  if (userSid && !allApproved.find((s) => s.id === userSid)) {
-    const userShelterName =
-      typeof user?.shelterId === "object"
-        ? user.shelterId.name
-        : "Default Shelter";
-    allApproved.unshift({
-      id: userSid,
-      name: userShelterName,
-    });
-  }
+  const normalizedActiveShelterId = extractId(activeShelterId as any);
 
-  // Deduplicate and filter out undefined IDs
-  const approvedShelters = allApproved.filter(
-    (s, index, self) => s.id && self.findIndex((t) => t.id === s.id) === index,
-  );
+  const currentShelterName =
+    allApproved.find((s) => s.id === normalizedActiveShelterId)?.name ||
+    "Shelter";
 
   const { data: dashboardData, isLoading } = useQuery({
-    queryKey: ["shelter-dashboard", activeShelterId],
+    queryKey: ["shelter-dashboard", normalizedActiveShelterId],
     queryFn: async () => {
       const response = await api.get("/dashboard/shelter", {
-        params: { shelterId: activeShelterId },
+        params: { shelterId: normalizedActiveShelterId },
       });
       return response.data;
     },
-    enabled: !!activeShelterId || user?.role === "admin",
+    enabled: !!normalizedActiveShelterId || user?.role === "admin",
   });
 
   const dashboardStats = dashboardData?.data?.stats || {};
@@ -153,32 +114,12 @@ export default function Dashboard() {
           <h1 className="text-3xl font-bold text-gray-900">
             Welcome back, {user?.firstName}!
           </h1>
-          {approvedShelters.length > 1 ? (
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-sm font-medium text-gray-500">
-                Viewing Stats For:
-              </span>
-              <select
-                value={activeShelterId}
-                onChange={(e) => setActiveShelterId(e.target.value)}
-                className="text-sm font-semibold text-primary-600 bg-primary-50 border-none rounded-lg focus:ring-0 cursor-pointer py-1"
-              >
-                {approvedShelters.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : approvedShelters.length === 1 ? (
+          {normalizedActiveShelterId ? (
             <p className="text-gray-500 mt-1">
-              Overview of <strong>{approvedShelters[0].name}</strong>{" "}
-              operations.
+              Overview of <strong>{currentShelterName}</strong> operations.
             </p>
           ) : (
-            <p className="text-gray-500 mt-1">
-              Overview of your shelter operations.
-            </p>
+            <p className="text-gray-500 mt-1">Overview of your operations.</p>
           )}
         </div>
         <Link

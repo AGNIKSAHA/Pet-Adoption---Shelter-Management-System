@@ -17,8 +17,10 @@ export interface User {
   email: string;
   phone?: string;
   role: "admin" | "shelter_staff" | "adopter";
+  roles?: string[];
   isEmailVerified: boolean;
   isActive: boolean;
+  activePlacementCount?: number;
   createdAt: string;
   shelterId?: string | Shelter;
   shelterApprovalStatus?: "pending" | "approved" | "rejected";
@@ -29,6 +31,10 @@ export interface User {
     zipCode: string;
     country: string;
   };
+  memberships?: {
+    shelterId: string | Shelter;
+    role: "admin" | "shelter_staff" | "adopter";
+  }[];
   staffApplications?: {
     _id: string;
     shelterId: string | Shelter;
@@ -82,6 +88,7 @@ export interface Shelter {
   description?: string;
   email: string;
   phone: string;
+  timezone?: string;
   address: {
     street: string;
     city: string;
@@ -133,6 +140,7 @@ export interface FosterAssignment {
 
 export interface AdoptionApplication {
   _id: string;
+  __v?: number;
   petId: Pet;
   userId: string;
   adopterId: {
@@ -189,4 +197,18 @@ export interface StaffApplication {
   shelterId: Shelter;
   status: "pending" | "approved" | "rejected";
   requestDate: string;
+}
+
+export interface PetTransferRequest {
+  _id: string;
+  petId: Pet | string;
+  fromShelterId: Shelter | string;
+  toShelterId: Shelter | string;
+  requestedBy: User | string;
+  decidedBy?: User | string;
+  status: "pending" | "approved" | "rejected";
+  note?: string;
+  decisionNote?: string;
+  createdAt: string;
+  updatedAt: string;
 }

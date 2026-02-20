@@ -17,9 +17,9 @@ import { AdoptionApplication, Shelter, Foster } from "../../types";
 
 export default function MyApplications() {
   const { data: fosterData, isLoading: isFosterLoading } = useQuery({
-    queryKey: ["my-foster-status"],
+    queryKey: ["my-foster-shelters-history"],
     queryFn: async () => {
-      const response = await api.get("/fosters/my-status");
+      const response = await api.get("/fosters/my-shelters");
       return response.data;
     },
   });
@@ -27,13 +27,15 @@ export default function MyApplications() {
   const { data, isLoading } = useQuery({
     queryKey: ["my-applications"],
     queryFn: async () => {
-      const response = await api.get("/applications");
+      const response = await api.get("/applications", {
+        params: { page: 1, limit: 1000 },
+      });
       return response.data;
     },
   });
 
   const applications = data?.data?.applications || [];
-  const fosterApplication = fosterData?.data as Foster | null;
+  const fosterApplications = (fosterData?.data?.records || []) as Foster[];
 
   const getStatusConfig = (status: string) => {
     switch (status) {
@@ -99,9 +101,11 @@ export default function MyApplications() {
       </div>
 
       <div className="space-y-6">
-        {/* Foster Application Section */}
-        {fosterApplication && (
-          <div className="bg-white rounded-xl shadow-sm border-2 border-primary-100 overflow-hidden hover:shadow-md transition-shadow">
+        {fosterApplications.map((fosterApplication: Foster) => (
+          <div
+            key={fosterApplication._id}
+            className="bg-white rounded-xl shadow-sm border-2 border-primary-100 overflow-hidden hover:shadow-md transition-shadow"
+          >
             <div className="bg-primary-50 px-6 py-2 border-b border-primary-100 flex items-center justify-between">
               <span className="text-xs font-bold text-primary-700 uppercase tracking-wider flex items-center gap-1">
                 <Building2 className="w-3.5 h-3.5" /> Foster Program Application
@@ -122,15 +126,16 @@ export default function MyApplications() {
                 <div>
                   <div className="flex items-center gap-3 mb-2">
                     <h3 className="text-xl font-bold text-gray-900">
-                      {(fosterApplication.shelterId as Shelter)?.name}
+                      {(fosterApplication.shelterId as Shelter)?.name ||
+                        "Unknown Shelter"}
                     </h3>
                   </div>
 
                   <div className="flex flex-col gap-2 text-sm text-gray-500">
                     <div className="flex items-center gap-2">
                       <Home className="w-4 h-4 text-primary-500" />
-                      {fosterApplication.homeType} •{" "}
-                      {fosterApplication.capacity} pets capacity
+                      {fosterApplication.homeType} • {fosterApplication.capacity}{" "}
+                      pets capacity
                     </div>
                     <div className="flex items-center gap-2">
                       <PawPrint className="w-4 h-4 text-primary-500" />
@@ -172,7 +177,7 @@ export default function MyApplications() {
               </div>
             </div>
           </div>
-        )}
+        ))}
 
         {applications.map((application: AdoptionApplication) => {
           const statusConfig = getStatusConfig(application.status);
@@ -246,7 +251,7 @@ export default function MyApplications() {
           );
         })}
 
-        {applications.length === 0 && !fosterApplication && (
+        {applications.length === 0 && fosterApplications.length === 0 && (
           <div className="text-center py-16 bg-white rounded-xl border border-dashed border-gray-300">
             <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 mb-4">
               <FileText className="w-8 h-8" />

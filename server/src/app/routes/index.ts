@@ -11,6 +11,7 @@ import messageRoutes from "../modules/message/message.routes";
 import notificationRoutes from "../modules/notification/notification.routes";
 import { shelterRoutes } from "../modules/shelter/shelter.routes";
 import webhookRoutes from "../modules/webhook/webhook.routes";
+import medicalRoutes from "../modules/medical/medical.routes";
 
 const router = Router();
 router.use("/notifications", notificationRoutes);
@@ -25,6 +26,7 @@ router.use("/fosters", fosterRoutes);
 router.use("/favorites", favoriteRoutes);
 router.use("/admin", adminRoutes);
 router.use("/messages", messageRoutes);
+router.use("/medical", medicalRoutes);
 router.use("/webhooks", webhookRoutes);
 
 // Health check

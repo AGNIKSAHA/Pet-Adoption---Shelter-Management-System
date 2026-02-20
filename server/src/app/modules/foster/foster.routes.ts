@@ -59,10 +59,22 @@ router.get(
   fosterController.getAdopterFosterStatus,
 );
 
+router.get(
+  "/my-shelters",
+  authorize("adopter"),
+  fosterController.getAdopterFosterShelters,
+);
+
 router.patch(
   "/update-profile",
   authorize("adopter"),
   fosterController.updateFosterProfile,
+);
+
+router.patch(
+  "/:id/preferences",
+  authorize("adopter"),
+  fosterController.updateAdopterFosterPreferencesById,
 );
 
 router.get(

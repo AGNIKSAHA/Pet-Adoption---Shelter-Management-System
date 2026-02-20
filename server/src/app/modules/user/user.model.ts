@@ -2,10 +2,17 @@ import mongoose, { Schema, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 import { encrypt, decrypt } from "../../common/utils/crypto";
 
+export interface IUserMembership {
+  shelterId: mongoose.Types.ObjectId;
+  role: "admin" | "shelter_staff" | "adopter";
+}
+
 export interface IUser extends Document {
   email: string;
   password: string;
   role: "admin" | "shelter_staff" | "adopter";
+  roles: string[];
+  memberships: IUserMembership[];
   firstName: string;
   lastName: string;
   phone?: string;
@@ -21,6 +28,7 @@ export interface IUser extends Document {
   shelterRequestDate?: Date;
   isEmailVerified: boolean;
   isActive: boolean;
+  activePlacementCount?: number;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -47,6 +55,24 @@ const userSchema = new Schema<IUser>(
       enum: ["admin", "shelter_staff", "adopter"],
       default: "adopter",
     },
+    roles: [
+      {
+        type: String,
+        enum: ["admin", "shelter_staff", "adopter"],
+      },
+    ],
+    memberships: [
+      {
+        shelterId: {
+          type: Schema.Types.ObjectId,
+          ref: "Shelter",
+        },
+        role: {
+          type: String,
+          enum: ["admin", "shelter_staff", "adopter"],
+        },
+      },
+    ],
     firstName: {
       type: String,
       required: [true, "First name is required"],
@@ -89,6 +115,11 @@ const userSchema = new Schema<IUser>(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    activePlacementCount: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
   },
   {

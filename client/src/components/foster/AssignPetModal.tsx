@@ -4,6 +4,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Foster, Pet, User } from "../../types";
 import { useEffect } from "react";
+import toast from "react-hot-toast";
+
+const FEDERATION_ACTIVE_PLACEMENT_LIMIT = 3;
 
 const assignSchema = z.object({
   petId: z.string().min(1, "Pet selection is required"),
@@ -45,11 +48,26 @@ export default function AssignPetModal({
     (f: Foster) => f._id === selectedFosterId,
   );
 
+  const selectedFosterGlobalCount =
+    Number((selectedFoster?.userId as User)?.activePlacementCount || 0) || 0;
+  const selectedFosterLimitReached =
+    selectedFosterGlobalCount >= FEDERATION_ACTIVE_PLACEMENT_LIMIT;
+
   useEffect(() => {
     if (!isOpen) {
       reset();
     }
   }, [isOpen, reset]);
+
+  const handleFormSubmit = (data: AssignFormData) => {
+    if (selectedFosterLimitReached) {
+      toast.error(
+        `Federation hard limit reached: ${selectedFosterGlobalCount}/${FEDERATION_ACTIVE_PLACEMENT_LIMIT} active placements.`,
+      );
+      return;
+    }
+    onSubmit(data);
+  };
 
   if (!isOpen) return null;
 
@@ -68,7 +86,7 @@ export default function AssignPetModal({
           </button>
         </div>
         <form
-          onSubmit={handleSubmit(onSubmit)}
+          onSubmit={handleSubmit(handleFormSubmit)}
           className="p-6 space-y-4 text-sm"
         >
           <div>
@@ -81,21 +99,40 @@ export default function AssignPetModal({
             >
               <option value="">Choose a foster parent...</option>
               {fosters
-                .filter(
-                  (f: Foster) =>
-                    f.status === "approved" && f.currentAnimals < f.capacity,
-                )
-                .map((f: Foster) => (
-                  <option key={f._id} value={f._id}>
-                    {(f.userId as User)?.firstName}{" "}
-                    {(f.userId as User)?.lastName} ({f.currentAnimals}/
-                    {f.capacity})
-                  </option>
-                ))}
+                .filter((f: Foster) => {
+                  const globalCount =
+                    Number((f.userId as User)?.activePlacementCount || 0) || 0;
+                  return (
+                    f.status === "approved" &&
+                    f.currentAnimals < f.capacity &&
+                    globalCount < FEDERATION_ACTIVE_PLACEMENT_LIMIT
+                  );
+                })
+                .map((f: Foster) => {
+                  const user = f.userId as User;
+                  const globalCount = Number(user?.activePlacementCount || 0) || 0;
+                  return (
+                    <option key={f._id} value={f._id}>
+                      {user?.firstName} {user?.lastName} ({f.currentAnimals}/
+                      {f.capacity}, global {globalCount}/
+                      {FEDERATION_ACTIVE_PLACEMENT_LIMIT})
+                    </option>
+                  );
+                })}
             </select>
             {errors.fosterId && (
               <p className="text-xs text-red-500 mt-1">
                 {errors.fosterId.message}
+              </p>
+            )}
+            {fosters.some((f) => {
+              const globalCount =
+                Number((f.userId as User)?.activePlacementCount || 0) || 0;
+              return globalCount >= FEDERATION_ACTIVE_PLACEMENT_LIMIT;
+            }) && (
+              <p className="text-xs text-amber-700 mt-1">
+                Foster parents at federation hard limit (3 active placements)
+                are excluded from assignment options.
               </p>
             )}
           </div>
@@ -169,10 +206,14 @@ export default function AssignPetModal({
           </div>
           <button
             type="submit"
-            disabled={isPending}
+            disabled={isPending || selectedFosterLimitReached}
             className="bg-primary-600 text-white rounded-xl font-bold hover:bg-primary-700 transition-all disabled:opacity-50 shadow-lg shadow-primary-200 active:scale-[0.98] w-full py-3"
           >
-            {isPending ? "Assigning..." : "Confirm Assignment"}
+            {isPending
+              ? "Assigning..."
+              : selectedFosterLimitReached
+                ? "Federation Limit Reached (3/3)"
+                : "Confirm Assignment"}
           </button>
         </form>
       </div>

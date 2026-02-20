@@ -4,8 +4,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Link, useNavigate } from "react-router-dom";
 import { PawPrint, Loader2 } from "lucide-react";
-import { useAppDispatch } from "../../store/store";
-import { setCredentials } from "../../store/slices/authSlice";
 import api from "../../lib/api";
 import toast from "react-hot-toast";
 import { AxiosError } from "axios";
@@ -23,9 +21,9 @@ const registerSchema = z
         "Password must contain uppercase, lowercase, and number",
       ),
     confirmPassword: z.string(),
-    role: z.enum(["adopter", "shelter_staff", "admin"], {
-      errorMap: () => ({ message: "Please select a role" }),
-    }),
+    roles: z
+      .array(z.enum(["adopter", "shelter_staff", "admin"]))
+      .min(1, "Please select at least one role"),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match",
@@ -36,7 +34,6 @@ type RegisterForm = z.infer<typeof registerSchema>;
 
 export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
-  const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
   const {
@@ -46,7 +43,7 @@ export default function Register() {
   } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
-      role: "adopter",
+      roles: ["adopter"],
     },
   });
 
@@ -55,16 +52,12 @@ export default function Register() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { confirmPassword, ...registerData } = data;
-      const response = await api.post("/auth/register", registerData);
+      await api.post("/auth/register", registerData);
 
-      dispatch(
-        setCredentials({
-          user: response.data.data.user,
-        }),
+      toast.success(
+        "Account created successfully! Please check your email to verify.",
       );
-
-      toast.success("Account created successfully!");
-      navigate("/dashboard");
+      navigate("/login");
     } catch (error: unknown) {
       if (error instanceof AxiosError) {
         const axiosError = error as AxiosError<{
@@ -197,28 +190,61 @@ export default function Register() {
             </div>
 
             <div>
-              <label
-                htmlFor="role"
-                className="block text-sm font-medium text-gray-700"
-              >
+              <span className="block text-sm font-medium text-gray-700">
                 I want to apply as
-              </label>
-              <div className="mt-1">
-                <select
-                  id="role"
-                  className="block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                  {...register("role")}
-                >
-                  <option value="adopter">Pet Adopter</option>
-                  <option value="shelter_staff">Shelter Staff</option>
-                  <option value="admin">Admin</option>
-                </select>
-                {errors.role && (
-                  <p className="mt-2 text-sm text-red-600">
-                    {errors.role.message}
-                  </p>
-                )}
+              </span>
+              <div className="mt-2 space-y-2">
+                <div className="flex items-center">
+                  <input
+                    id="role-adopter"
+                    type="checkbox"
+                    value="adopter"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    {...register("roles")}
+                  />
+                  <label
+                    htmlFor="role-adopter"
+                    className="ml-2 block text-sm text-gray-900"
+                  >
+                    Pet Adopter
+                  </label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    id="role-staff"
+                    type="checkbox"
+                    value="shelter_staff"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    {...register("roles")}
+                  />
+                  <label
+                    htmlFor="role-staff"
+                    className="ml-2 block text-sm text-gray-900"
+                  >
+                    Shelter Staff
+                  </label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    id="role-admin"
+                    type="checkbox"
+                    value="admin"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    {...register("roles")}
+                  />
+                  <label
+                    htmlFor="role-admin"
+                    className="ml-2 block text-sm text-gray-900"
+                  >
+                    Admin
+                  </label>
+                </div>
               </div>
+              {errors.roles && (
+                <p className="mt-2 text-sm text-red-600">
+                  {errors.roles.message}
+                </p>
+              )}
             </div>
 
             <div>

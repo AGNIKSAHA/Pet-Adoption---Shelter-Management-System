@@ -7,7 +7,12 @@ declare global {
         id: string;
         email: string;
         role: "admin" | "shelter_staff" | "adopter";
+        roles?: string[];
         shelterId?: string;
+        memberships?: {
+          shelterId: string;
+          role: "admin" | "shelter_staff" | "adopter";
+        }[];
       };
     }
   }

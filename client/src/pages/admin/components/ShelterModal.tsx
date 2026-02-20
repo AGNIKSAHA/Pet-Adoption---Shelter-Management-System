@@ -9,6 +9,7 @@ const shelterSchema = z.object({
   description: z.string().min(10, "Description must be at least 10 characters"),
   email: z.string().email("Invalid email address"),
   phone: z.string().min(5, "Phone is required"),
+  timezone: z.string().min(1, "Timezone is required"),
   address: z.object({
     street: z.string().min(1, "Street is required"),
     city: z.string().min(1, "City is required"),
@@ -62,6 +63,7 @@ export default function ShelterModal({
         description: shelter.description,
         email: shelter.email,
         phone: shelter.phone,
+        timezone: shelter.timezone || "UTC",
         address: shelter.address,
         capacity: shelter.capacity,
         location: shelter.location || { type: "Point", coordinates: [0, 0] },
@@ -72,6 +74,7 @@ export default function ShelterModal({
         description: "",
         email: "",
         phone: "",
+        timezone: "UTC",
         address: {
           street: "",
           city: "",
@@ -160,6 +163,22 @@ export default function ShelterModal({
                 {errors.capacity && (
                   <p className="text-xs text-red-500">
                     {errors.capacity.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-gray-700">
+                  Timezone
+                </label>
+                <input
+                  {...register("timezone")}
+                  className={`w-full px-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-primary-500 transition-all ${errors.timezone ? "border-red-500" : "border-gray-200"}`}
+                  placeholder="e.g., America/New_York"
+                />
+                {errors.timezone && (
+                  <p className="text-xs text-red-500">
+                    {errors.timezone.message}
                   </p>
                 )}
               </div>

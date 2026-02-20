@@ -5,6 +5,7 @@ export class AppError extends Error {
     public statusCode: number,
     public message: string,
     public isOperational = true,
+    public details?: unknown,
   ) {
     super(message);
     Object.setPrototypeOf(this, AppError.prototype);
@@ -23,6 +24,7 @@ export const errorHandler = (
     res.status(err.statusCode).json({
       success: false,
       message: err.message,
+      ...(err.details !== undefined ? { details: err.details } : {}),
     });
     return;
   }

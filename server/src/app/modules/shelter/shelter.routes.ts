@@ -27,6 +27,13 @@ router.post(
   shelterController.applyToShelter,
 );
 
+router.delete(
+  "/leave/:shelterId",
+  authenticate,
+  authorize("shelter_staff"),
+  shelterController.leaveShelter,
+);
+
 router.patch(
   "/staff/:id/approve",
   authenticate,

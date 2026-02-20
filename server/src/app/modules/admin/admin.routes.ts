@@ -1,13 +1,10 @@
 import { Router } from "express";
 import * as adminController from "./admin.controller";
-import {
-  authenticate,
-  authorize,
-} from "../../common/middlewares/auth.middleware";
+import { authenticate, authorize } from "../../common/middlewares/auth.middleware";
 
 const router = Router();
 
-// All admin routes are protected by authentication and admin role
+// All admin routes require authenticated admin role
 router.use(authenticate, authorize("admin"));
 
 // User Management

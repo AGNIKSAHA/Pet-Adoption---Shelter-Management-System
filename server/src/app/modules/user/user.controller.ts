@@ -6,7 +6,7 @@ import { IStaffApplication } from "../shelter/staff-application.model";
 
 export const updateProfile = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user!.id;
-  const { firstName, lastName, phone, address } = req.body;
+  const { firstName, lastName, phone, address, roles } = req.body;
 
   const user = await User.findById(userId);
   if (!user) {
@@ -17,6 +17,12 @@ export const updateProfile = catchAsync(async (req: Request, res: Response) => {
   if (firstName) user.firstName = firstName;
   if (lastName) user.lastName = lastName;
   if (phone) user.phone = phone;
+  if (roles && Array.isArray(roles)) {
+    user.roles = roles;
+    if (roles.includes("admin")) user.role = "admin";
+    else if (roles.includes("shelter_staff")) user.role = "shelter_staff";
+    else user.role = "adopter";
+  }
   if (address) {
     user.address = {
       ...user.address,
@@ -47,7 +53,9 @@ export const updateProfile = catchAsync(async (req: Request, res: Response) => {
         phone: user.phone,
         address: user.address,
         role: user.role,
+        roles: user.roles,
         isEmailVerified: user.isEmailVerified,
+        memberships: user.memberships,
         staffApplications,
       },
     },

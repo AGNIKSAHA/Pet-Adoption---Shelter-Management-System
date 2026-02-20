@@ -4,6 +4,7 @@ export interface IMedicalRecord extends Document {
   petId: mongoose.Types.ObjectId;
   recordType:
     | "vaccination"
+    | "correction"
     | "sterilization"
     | "condition"
     | "checkup"
@@ -14,6 +15,7 @@ export interface IMedicalRecord extends Document {
   veterinarian?: string;
   documents: string[];
   nextDueDate?: Date;
+  correctsRecordId?: mongoose.Types.ObjectId;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -30,6 +32,7 @@ const medicalRecordSchema = new Schema<IMedicalRecord>(
       type: String,
       enum: [
         "vaccination",
+        "correction",
         "sterilization",
         "condition",
         "checkup",
@@ -56,6 +59,10 @@ const medicalRecordSchema = new Schema<IMedicalRecord>(
       default: [],
     },
     nextDueDate: Date,
+    correctsRecordId: {
+      type: Schema.Types.ObjectId,
+      ref: "MedicalRecord",
+    },
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -71,6 +78,7 @@ const medicalRecordSchema = new Schema<IMedicalRecord>(
 medicalRecordSchema.index({ petId: 1 });
 medicalRecordSchema.index({ recordType: 1 });
 medicalRecordSchema.index({ date: -1 });
+medicalRecordSchema.index({ correctsRecordId: 1 });
 
 export const MedicalRecord = mongoose.model<IMedicalRecord>(
   "MedicalRecord",

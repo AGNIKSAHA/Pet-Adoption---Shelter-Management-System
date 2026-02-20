@@ -28,6 +28,7 @@ import ShelterDashboard from "./pages/shelter/Dashboard";
 import PetManagement from "./pages/shelter/PetManagement";
 import ApplicationsQueue from "./pages/shelter/ApplicationsQueue";
 import FosterBoard from "./pages/shelter/FosterBoard";
+import PetTransfer from "./pages/shelter/PetTransfer";
 
 // Admin Pages
 import AdminDashboard from "./pages/admin/Dashboard";
@@ -44,14 +45,14 @@ import ShelterGuard from "./components/ShelterGuard";
  * GuestGuard: Redirects authenticated users away from public-only pages (like Login)
  */
 const GuestGuard = () => {
-  const { isAuthenticated, user, loading } = useAppSelector(
+  const { isAuthenticated, user, loading, activeRole } = useAppSelector(
     (state) => state.auth,
   );
 
   if (loading) return <LoadingSpinner />;
 
   if (isAuthenticated && user) {
-    return <Navigate to={getDashboardRoute(user)} replace />;
+    return <Navigate to={getDashboardRoute(user, activeRole)} replace />;
   }
 
   return <Outlet />;
@@ -76,13 +77,20 @@ const AuthGuard = () => {
  * RoleGuard: Ensures authenticated user has specific roles
  */
 const RoleGuard = ({ allowedRoles }: { allowedRoles: string[] }) => {
-  const { user, loading } = useAppSelector((state) => state.auth);
+  const { user, loading, activeRole } = useAppSelector((state) => state.auth);
 
   if (loading) return <LoadingSpinner />;
 
-  if (!user || !allowedRoles.includes(user.role)) {
+  const currentRole = activeRole || user?.role;
+
+  if (!user || !currentRole || !allowedRoles.includes(currentRole)) {
     // If not authorized, send back to their own dashboard or home
-    return <Navigate to={user ? getDashboardRoute(user) : "/login"} replace />;
+    return (
+      <Navigate
+        to={user ? getDashboardRoute(user, activeRole) : "/login"}
+        replace
+      />
+    );
   }
 
   return <Outlet />;
@@ -94,8 +102,9 @@ const LoadingSpinner = () => (
   </div>
 );
 
-const getDashboardRoute = (user: User) => {
-  switch (user.role) {
+const getDashboardRoute = (user: User, activeRole?: string | null) => {
+  const role = activeRole || user.role;
+  switch (role) {
     case "admin":
       return "/admin/dashboard";
     case "shelter_staff":
@@ -108,9 +117,9 @@ const getDashboardRoute = (user: User) => {
 };
 
 const DashboardRedirect = () => {
-  const { user } = useAppSelector((state) => state.auth);
+  const { user, activeRole } = useAppSelector((state) => state.auth);
   if (!user) return <Navigate to="/login" replace />;
-  return <Navigate to={getDashboardRoute(user)} replace />;
+  return <Navigate to={getDashboardRoute(user, activeRole)} replace />;
 };
 
 export const router = createBrowserRouter([
@@ -174,6 +183,7 @@ export const router = createBrowserRouter([
                 children: [
                   { path: "dashboard", element: <ShelterDashboard /> },
                   { path: "pets", element: <PetManagement /> },
+                  { path: "pet-transfers", element: <PetTransfer /> },
                   { path: "applications", element: <ApplicationsQueue /> },
                   { path: "fosters", element: <FosterBoard /> },
                 ],

@@ -19,6 +19,7 @@ export default function Dashboard() {
   });
 
   const dashboardStats = dashboardData?.data?.stats || {};
+  const intakeCohorts = dashboardData?.data?.analytics?.intakeCohorts || [];
 
   const stats = [
     {
@@ -156,6 +157,47 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900">
+            Intake Cohort Analysis
+          </h2>
+          <p className="text-xs text-gray-500">
+            Grouped by intake month in each shelter timezone
+          </p>
+        </div>
+        {intakeCohorts.length === 0 ? (
+          <p className="text-sm text-gray-500">No cohort data available.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-left text-gray-500">
+                  <th className="py-2 pr-4 font-semibold">Cohort Month</th>
+                  <th className="py-2 pr-4 font-semibold">Intake</th>
+                  <th className="py-2 pr-4 font-semibold">Adopted</th>
+                  <th className="py-2 pr-4 font-semibold">Still In Care</th>
+                  <th className="py-2 pr-4 font-semibold">Adoption Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {intakeCohorts.map((cohort: any) => (
+                  <tr key={cohort.cohortMonth} className="border-b border-gray-50">
+                    <td className="py-2 pr-4 font-medium text-gray-900">
+                      {cohort.cohortMonth}
+                    </td>
+                    <td className="py-2 pr-4">{cohort.totalIntake}</td>
+                    <td className="py-2 pr-4">{cohort.adopted}</td>
+                    <td className="py-2 pr-4">{cohort.inCare}</td>
+                    <td className="py-2 pr-4">{cohort.adoptionRate}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
