@@ -14,9 +14,11 @@ const coercedBoolean = z
   .union([z.boolean(), z.enum(["true", "false"])])
   .transform((value) => value === true || value === "true");
 
-const isAbsoluteUrl = (value: string) => z.string().url().safeParse(value).success;
+const isAbsoluteUrl = (value: string) =>
+  z.string().url().safeParse(value).success;
 const isUploadPath = (value: string) => /^\/uploads\/.+/i.test(value);
-const isDataImageUrl = (value: string) => /^data:image\/[a-zA-Z0-9+.-]+;base64,/i.test(value);
+const isDataImageUrl = (value: string) =>
+  /^data:image\/[a-zA-Z0-9+.-]+;base64,/i.test(value);
 const isValidImageLink = (value: string) =>
   isAbsoluteUrl(value) || isUploadPath(value) || isDataImageUrl(value);
 
@@ -232,11 +234,16 @@ export default function PetModal({
       const appendVaccinationCorrection = async (petId: string) => {
         if (!vaccinationReportPdf || !data.health.vaccinated) return;
 
-        const timelineResponse = await api.get(`/medical/pets/${petId}/timeline`);
+        const timelineResponse = await api.get(
+          `/medical/pets/${petId}/timeline`,
+        );
         const auditTrail = timelineResponse.data?.data?.auditTrail || [];
         const latestVaccination = [...auditTrail]
           .reverse()
-          .find((record: any) => record.recordType === "vaccination");
+          .find(
+            (record: { recordType: string }) =>
+              record.recordType === "vaccination",
+          );
 
         if (!latestVaccination?._id) {
           await createVaccinationRecord(petId);
@@ -313,7 +320,10 @@ export default function PetModal({
           return updateResponse;
         } catch (error) {
           const axiosError = error as AxiosError;
-          if (canQueueOffline && (!axiosError.response || axiosError.code === "ERR_NETWORK")) {
+          if (
+            canQueueOffline &&
+            (!axiosError.response || axiosError.code === "ERR_NETWORK")
+          ) {
             queueOfflinePetOperation({
               type: "update",
               petId: pet._id,
@@ -365,7 +375,10 @@ export default function PetModal({
         }
 
         try {
-          const createResponse = await api.post("/pets", { ...payload, shelterId });
+          const createResponse = await api.post("/pets", {
+            ...payload,
+            shelterId,
+          });
           const createdPetId = createResponse.data?.data?.pet?._id;
           if (createdPetId) {
             await createVaccinationRecord(createdPetId);
@@ -373,7 +386,10 @@ export default function PetModal({
           return createResponse;
         } catch (error) {
           const axiosError = error as AxiosError;
-          if (canQueueOffline && (!axiosError.response || axiosError.code === "ERR_NETWORK")) {
+          if (
+            canQueueOffline &&
+            (!axiosError.response || axiosError.code === "ERR_NETWORK")
+          ) {
             queueOfflinePetOperation({
               type: "create",
               shelterId,
@@ -385,11 +401,13 @@ export default function PetModal({
         }
       }
     },
-    onSuccess: (result: any) => {
+    onSuccess: (result: { data?: { offlineQueued?: boolean } }) => {
       queryClient.invalidateQueries({ queryKey: ["shelter-pets"] });
       queryClient.invalidateQueries({ queryKey: ["shelter-pet-stats"] });
       if (pet?._id) {
-        queryClient.invalidateQueries({ queryKey: ["medical-timeline", pet._id] });
+        queryClient.invalidateQueries({
+          queryKey: ["medical-timeline", pet._id],
+        });
       }
       if (result?.data?.offlineQueued) {
         toast.success(
@@ -398,7 +416,11 @@ export default function PetModal({
             : "Offline: pet creation saved locally and will sync automatically.",
         );
       } else {
-        if (pet && pet.status === "medical_hold" && watch("status") === "available") {
+        if (
+          pet &&
+          pet.status === "medical_hold" &&
+          watch("status") === "available"
+        ) {
           toast.success(
             "Pet details updated and vet sign-off request sent. Status will auto-change after vet approval.",
           );
@@ -421,8 +443,9 @@ export default function PetModal({
 
   const onSubmit = (data: PetFormData) => {
     const previousVaccinated = pet?.health?.vaccinated ?? false;
-    const vaccinationChanged =
-      !pet ? data.health.vaccinated : previousVaccinated !== data.health.vaccinated;
+    const vaccinationChanged = !pet
+      ? data.health.vaccinated
+      : previousVaccinated !== data.health.vaccinated;
 
     if (vaccinationChanged && !data.vaccinationReportPdf) {
       toast.error("Please add vaccination report PDF link before submitting.");
@@ -438,8 +461,7 @@ export default function PetModal({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const isPdf =
-      file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+    const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
     if (!isPdf) {
       toast.error("Please upload a PDF file only.");
       event.target.value = "";
@@ -511,7 +533,8 @@ export default function PetModal({
       toast.success("Pet image uploaded.");
     } catch (error) {
       const axiosError = error as AxiosError<{ message: string }>;
-      const isNetworkIssue = !axiosError.response || axiosError.code === "ERR_NETWORK";
+      const isNetworkIssue =
+        !axiosError.response || axiosError.code === "ERR_NETWORK";
       if (user?.role === "shelter_staff" && isNetworkIssue) {
         const reader = new FileReader();
         reader.onload = () => {
@@ -724,7 +747,8 @@ export default function PetModal({
                 watch("status") === "available" && (
                   <div className="md:col-span-2 p-4 rounded-xl border border-amber-200 bg-amber-50 space-y-3">
                     <p className="text-sm font-semibold text-amber-800">
-                      Vet sign-off is required to move from Medical Hold to Available.
+                      Vet sign-off is required to move from Medical Hold to
+                      Available.
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1">
@@ -872,7 +896,10 @@ export default function PetModal({
                     <label className="text-sm font-medium text-gray-700">
                       Vaccination Report (PDF File)
                     </label>
-                    <input type="hidden" {...register("vaccinationReportPdf")} />
+                    <input
+                      type="hidden"
+                      {...register("vaccinationReportPdf")}
+                    />
                     <input
                       type="file"
                       accept="application/pdf,.pdf"
@@ -900,7 +927,9 @@ export default function PetModal({
                       </p>
                     )}
                     {uploadingReport && (
-                      <p className="text-xs text-primary-600">Uploading PDF...</p>
+                      <p className="text-xs text-primary-600">
+                        Uploading PDF...
+                      </p>
                     )}
                     {errors.vaccinationReportPdf && (
                       <p className="text-xs text-red-500">
@@ -987,71 +1016,91 @@ export default function PetModal({
 
                     return (
                       <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                        {records.map((record: any) => (
-                          <div
-                            key={record._id}
-                            className="rounded-xl border border-gray-200 bg-gray-50 p-3"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm font-semibold text-gray-900">
-                                {record.title}
+                        {records.map(
+                          (record: {
+                            title?: string;
+                            _id: string;
+                            notes?: string;
+                            date: string;
+                            attachments?: string[];
+                            recordType?: string;
+                            isCorrected?: boolean;
+                            description?: string;
+                            correctsRecordId?: string;
+                            appliedCorrectionId?: string;
+                            documents?: string[];
+                          }) => (
+                            <div
+                              key={record._id}
+                              className="rounded-xl border border-gray-200 bg-gray-50 p-3"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {record.title}
+                                </p>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 uppercase">
+                                    {String(record.recordType).replace(
+                                      "_",
+                                      " ",
+                                    )}
+                                  </span>
+                                  {record.isCorrected && (
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                                      Corrected
+                                    </span>
+                                  )}
+                                  {record.recordType === "correction" && (
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                                      Correction
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <p className="text-xs text-gray-600 mt-1">
+                                {record.description}
                               </p>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 uppercase">
-                                  {String(record.recordType).replace("_", " ")}
+                              <div className="mt-2 text-[11px] text-gray-500 flex flex-wrap gap-x-3 gap-y-1">
+                                <span>
+                                  Date:{" "}
+                                  {record.date
+                                    ? new Date(record.date).toLocaleDateString()
+                                    : "-"}
                                 </span>
-                                {record.isCorrected && (
-                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                                    Corrected
+                                {record.correctsRecordId && (
+                                  <span>
+                                    Corrects ID: {record.correctsRecordId}
                                   </span>
                                 )}
-                                {record.recordType === "correction" && (
-                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                                    Correction
+                                {record.appliedCorrectionId && (
+                                  <span>
+                                    Applied Correction ID:{" "}
+                                    {record.appliedCorrectionId}
                                   </span>
                                 )}
                               </div>
+                              {Array.isArray(record.documents) &&
+                                record.documents.length > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {record.documents.map(
+                                      (doc: string, docIndex: number) => (
+                                        <a
+                                          key={`${record._id}-doc-${docIndex}`}
+                                          href={doc}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          download
+                                          className="text-xs px-2 py-1 rounded border border-primary-200 text-primary-700 bg-white hover:bg-primary-50"
+                                        >
+                                          Download PDF
+                                        </a>
+                                      ),
+                                    )}
+                                  </div>
+                                )}
                             </div>
-                            <p className="text-xs text-gray-600 mt-1">
-                              {record.description}
-                            </p>
-                            <div className="mt-2 text-[11px] text-gray-500 flex flex-wrap gap-x-3 gap-y-1">
-                              <span>
-                                Date:{" "}
-                                {record.date
-                                  ? new Date(record.date).toLocaleDateString()
-                                  : "-"}
-                              </span>
-                              {record.correctsRecordId && (
-                                <span>Corrects ID: {record.correctsRecordId}</span>
-                              )}
-                              {record.appliedCorrectionId && (
-                                <span>
-                                  Applied Correction ID: {record.appliedCorrectionId}
-                                </span>
-                              )}
-                            </div>
-                            {Array.isArray(record.documents) &&
-                              record.documents.length > 0 && (
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {record.documents.map(
-                                    (doc: string, docIndex: number) => (
-                                      <a
-                                        key={`${record._id}-doc-${docIndex}`}
-                                        href={doc}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        download
-                                        className="text-xs px-2 py-1 rounded border border-primary-200 text-primary-700 bg-white hover:bg-primary-50"
-                                      >
-                                        Download PDF
-                                      </a>
-                                    ),
-                                  )}
-                                </div>
-                              )}
-                          </div>
-                        ))}
+                          ),
+                        )}
                       </div>
                     );
                   })()}

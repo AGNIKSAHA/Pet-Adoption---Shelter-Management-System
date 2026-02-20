@@ -48,7 +48,9 @@ export default function ApplicationsQueue() {
       };
     }) || [];
 
-  const normalizedActiveShelterId = extractId(activeShelterId as any);
+  const normalizedActiveShelterId = extractId(
+    activeShelterId as string | undefined | null,
+  );
 
   const currentShelterName =
     allApproved.find((s) => s.id === normalizedActiveShelterId)?.name ||
@@ -126,7 +128,9 @@ export default function ApplicationsQueue() {
         if (latest) {
           setSelectedApp(latest);
         }
-        toast.error("Merge conflict detected. Review latest changes and retry.");
+        toast.error(
+          "Merge conflict detected. Review latest changes and retry.",
+        );
         return;
       }
       toast.error(error.response?.data?.message || "Failed to update status");

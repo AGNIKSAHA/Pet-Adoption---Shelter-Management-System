@@ -183,17 +183,28 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {intakeCohorts.map((cohort: any) => (
-                  <tr key={cohort.cohortMonth} className="border-b border-gray-50">
-                    <td className="py-2 pr-4 font-medium text-gray-900">
-                      {cohort.cohortMonth}
-                    </td>
-                    <td className="py-2 pr-4">{cohort.totalIntake}</td>
-                    <td className="py-2 pr-4">{cohort.adopted}</td>
-                    <td className="py-2 pr-4">{cohort.inCare}</td>
-                    <td className="py-2 pr-4">{cohort.adoptionRate}%</td>
-                  </tr>
-                ))}
+                {intakeCohorts.map(
+                  (cohort: {
+                    cohortMonth: string;
+                    totalIntake: number;
+                    adopted: number;
+                    inCare: number;
+                    adoptionRate: string;
+                  }) => (
+                    <tr
+                      key={cohort.cohortMonth}
+                      className="border-b border-gray-50"
+                    >
+                      <td className="py-2 pr-4 font-medium text-gray-900">
+                        {cohort.cohortMonth}
+                      </td>
+                      <td className="py-2 pr-4">{cohort.totalIntake}</td>
+                      <td className="py-2 pr-4">{cohort.adopted}</td>
+                      <td className="py-2 pr-4">{cohort.inCare}</td>
+                      <td className="py-2 pr-4">{cohort.adoptionRate}%</td>
+                    </tr>
+                  ),
+                )}
               </tbody>
             </table>
           </div>

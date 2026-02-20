@@ -37,7 +37,9 @@ export default function FosterBoard() {
       };
     }) || [];
 
-  const normalizedActiveShelterId = extractId(activeShelterId as any);
+  const normalizedActiveShelterId = extractId(
+    activeShelterId as string | undefined | null,
+  );
 
   const currentShelterName =
     allApproved.find((s) => s.id === normalizedActiveShelterId)?.name ||

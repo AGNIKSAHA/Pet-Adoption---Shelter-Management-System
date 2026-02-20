@@ -106,7 +106,11 @@ export const authorize = (...roles: string[]) => {
 export const checkShelterAccess = (
   requiredRole?: "admin" | "shelter_staff",
 ) => {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  return async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
     if (!req.user) {
       res
         .status(401)
@@ -137,15 +141,15 @@ export const checkShelterAccess = (
 
     const memberships = req.user.memberships || [];
     const membership = memberships.find(
-      (m: any) => m.shelterId.toString() === requestedShelterId.toString(),
+      (m: { shelterId: mongoose.Types.ObjectId | string }) =>
+        m.shelterId.toString() === requestedShelterId.toString(),
     );
 
     if (!membership) {
       // Fallback: allow shelter staff with an approved application for the requested shelter.
       if (req.user.role === "shelter_staff") {
-        const { StaffApplication } = await import(
-          "../../modules/shelter/staff-application.model"
-        );
+        const { StaffApplication } =
+          await import("../../modules/shelter/staff-application.model");
         const approvedAccess = await StaffApplication.findOne({
           userId: req.user.id,
           shelterId: requestedShelterId,

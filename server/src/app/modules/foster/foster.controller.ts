@@ -370,7 +370,8 @@ const assignPetToFosterCore = async (
     fosterId: { $in: fosterIds },
     status: "active",
   });
-  if (session) activePlacementCountQuery = activePlacementCountQuery.session(session);
+  if (session)
+    activePlacementCountQuery = activePlacementCountQuery.session(session);
   const actualActivePlacements = await activePlacementCountQuery;
 
   if (fosterUser.activePlacementCount !== actualActivePlacements) {
@@ -390,7 +391,7 @@ const assignPetToFosterCore = async (
         { activePlacementCount: { $lt: 3 } },
       ],
     },
-    { $inc: { activePlacementCount: 1 } as any },
+    { $inc: { activePlacementCount: 1 } },
     session ? { new: true, session } : { new: true },
   );
 
@@ -455,7 +456,11 @@ export const assignPetToFoster = catchAsync(
     try {
       try {
         await session.withTransaction(async () => {
-          createdAssignment = await assignPetToFosterCore(req, payload, session);
+          createdAssignment = await assignPetToFosterCore(
+            req,
+            payload,
+            session,
+          );
         });
       } catch (error) {
         if (!isTransactionUnsupportedError(error)) {
@@ -552,7 +557,16 @@ const takeBackPetFromFosterCore = async (
   }
 
   if (pet) {
-    pet.status = returnStatus as any;
+    pet.status = returnStatus as
+      | "available"
+      | "intake"
+      | "medical_hold"
+      | "meet"
+      | "adopted"
+      | "returned"
+      | "fostered"
+      | "transferred"
+      | "deceased";
     if (session) {
       await pet.save({ session });
     } else {

@@ -48,12 +48,17 @@ export default function PetManagement() {
       }
       return undefined;
     }
-    const maybeId = (val as any)._id || (val as any).id;
-    if (maybeId) return extractId(maybeId as any);
+    const maybeId =
+      (val as { _id?: string; id?: string })._id ||
+      (val as { _id?: string; id?: string }).id;
+    if (maybeId) return extractId(maybeId as string);
 
-    if (typeof (val as any).toString === "function") {
-      const asString = (val as any).toString();
-      if (typeof asString === "string" && MONGO_OBJECT_ID_REGEX.test(asString)) {
+    if (typeof (val as { toString?: () => string }).toString === "function") {
+      const asString = (val as { toString: () => string }).toString();
+      if (
+        typeof asString === "string" &&
+        MONGO_OBJECT_ID_REGEX.test(asString)
+      ) {
         return asString;
       }
     }
@@ -65,7 +70,7 @@ export default function PetManagement() {
     user?.memberships?.map((m) => {
       const shelterName =
         m.shelterId && typeof m.shelterId === "object"
-          ? (m.shelterId as any).name
+          ? (m.shelterId as { name?: string }).name || "Primary Shelter"
           : "Primary Shelter";
       return {
         id: extractId(m.shelterId),
@@ -76,11 +81,13 @@ export default function PetManagement() {
   (user?.staffApplications || [])
     .filter((app) => app.status === "approved")
     .forEach((app) => {
-      const sid = extractId(app.shelterId as any);
+      const sid = extractId(
+        app.shelterId as string | { _id?: string; id?: string },
+      );
       if (!sid) return;
       const shelterName =
         typeof app.shelterId === "object"
-          ? (app.shelterId as any).name || "Approved Shelter"
+          ? (app.shelterId as { name?: string }).name || "Approved Shelter"
           : "Approved Shelter";
       if (!allApproved.find((s) => s.id === sid)) {
         allApproved.push({ id: sid, name: shelterName });
@@ -103,13 +110,14 @@ export default function PetManagement() {
   const allShelters = allApproved.filter(
     (s, index, self) => s.id && self.findIndex((t) => t.id === s.id) === index,
   );
-  const normalizedActiveShelterId = extractId(activeShelterId as any);
+  const normalizedActiveShelterId = extractId(
+    activeShelterId as string | undefined,
+  );
   const effectiveShelterId =
     normalizedActiveShelterId || (allShelters[0]?.id as string | undefined);
 
   const currentShelterName =
-    allShelters.find((s) => s.id === effectiveShelterId)?.name ||
-    "Shelter";
+    allShelters.find((s) => s.id === effectiveShelterId)?.name || "Shelter";
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -174,15 +182,8 @@ export default function PetManagement() {
     enabled: !!effectiveShelterId || user?.role === "admin",
   });
 
-
   const { data, isLoading } = useQuery({
-    queryKey: [
-      "shelter-pets",
-      page,
-      search,
-      statusFilter,
-      effectiveShelterId,
-    ],
+    queryKey: ["shelter-pets", page, search, statusFilter, effectiveShelterId],
     queryFn: async () => {
       const response = await api.get("/pets", {
         params: {
@@ -335,7 +336,6 @@ export default function PetManagement() {
         </div>
       </div>
 
-
       {(offlinePendingCount > 0 || isSyncingOffline) && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <p className="text-sm font-medium text-amber-800">
@@ -344,7 +344,8 @@ export default function PetManagement() {
               : `${offlinePendingCount} offline pet change${offlinePendingCount > 1 ? "s" : ""} pending sync.`}
           </p>
           <p className="text-xs text-amber-700">
-            Changes are stored locally and will auto-merge when internet is available.
+            Changes are stored locally and will auto-merge when internet is
+            available.
           </p>
         </div>
       )}
